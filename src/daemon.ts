@@ -10,8 +10,8 @@ const SAMPLES_PATH = `${DATA_DIR}samples.jsonl`;
 const STATE_PATH = `${DATA_DIR}state.json`;
 const LOG_PATH = new URL("../logs/daemon.log", import.meta.url).pathname;
 
-const INTERVAL_MS = parseInt(process.env.NETMON_INTERVAL_MS || "60000", 10);          // default 60s
-const DOWNLOAD_EVERY = parseInt(process.env.NETMON_DOWNLOAD_EVERY || "10", 10);       // every Nth cycle
+const INTERVAL_MS = parseInt(process.env.CANIREACH_INTERVAL_MS || "60000", 10);          // default 60s
+const DOWNLOAD_EVERY = parseInt(process.env.CANIREACH_DOWNLOAD_EVERY || "10", 10);       // every Nth cycle
 
 await mkdir(DATA_DIR, { recursive: true });
 await mkdir(new URL("../logs/", import.meta.url).pathname, { recursive: true });

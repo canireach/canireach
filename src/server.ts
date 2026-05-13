@@ -2,7 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 
-const PORT = parseInt(process.env.NETMON_PORT || "8787", 10);
+const PORT = parseInt(process.env.CANIREACH_PORT || "8787", 10);
 const DATA_DIR = new URL("../data/", import.meta.url).pathname;
 const PUBLIC_DIR = new URL("../public/", import.meta.url).pathname;
 const SAMPLES_PATH = `${DATA_DIR}samples.jsonl`;
@@ -44,7 +44,7 @@ const server = Bun.serve({
   },
 });
 
-console.log(`netmon server listening on http://localhost:${server.port}`);
+console.log(`canireach server listening on http://localhost:${server.port}`);
 
 async function loadTail(limit: number) {
   if (!existsSync(SAMPLES_PATH)) return [];

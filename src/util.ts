@@ -80,7 +80,7 @@ export async function curlMetrics(opts: {
   // Leading \n+sentinel so we can split the body from the metrics block reliably even when
   // the response body has no trailing newline.
   const fmt =
-    "\n__NETMON__\nhttp_code=%{http_code}\nnamelookup=%{time_namelookup}\nconnect=%{time_connect}\nappconnect=%{time_appconnect}\nstarttransfer=%{time_starttransfer}\ntotal=%{time_total}\nsize=%{size_download}\nremote=%{remote_ip}\n";
+    "\n__CANIREACH__\nhttp_code=%{http_code}\nnamelookup=%{time_namelookup}\nconnect=%{time_connect}\nappconnect=%{time_appconnect}\nstarttransfer=%{time_starttransfer}\ntotal=%{time_total}\nsize=%{size_download}\nremote=%{remote_ip}\n";
   const args = ["-sS", "-w", fmt];
   if (opts.headOnly) args.push("-I");
   if (!opts.captureBody) args.push("-o", "/dev/null");
@@ -101,9 +101,9 @@ export async function curlMetrics(opts: {
   });
 
   // Split body from metrics using our sentinel.
-  const sentinelIdx = r.stdout.lastIndexOf("\n__NETMON__\n");
+  const sentinelIdx = r.stdout.lastIndexOf("\n__CANIREACH__\n");
   const body = sentinelIdx >= 0 ? r.stdout.slice(0, sentinelIdx) : "";
-  const metricsText = sentinelIdx >= 0 ? r.stdout.slice(sentinelIdx + "\n__NETMON__\n".length) : r.stdout;
+  const metricsText = sentinelIdx >= 0 ? r.stdout.slice(sentinelIdx + "\n__CANIREACH__\n".length) : r.stdout;
   const parsed = parseCurlWrite(metricsText);
   return {
     ok: r.ok && parsed.http_code >= 200 && parsed.http_code < 600 && parsed.http_code !== 0,
