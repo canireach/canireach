@@ -1,4 +1,6 @@
-// Bun HTTP server. Serves the dashboard HTML and a few JSON endpoints over the JSONL log.
+// HTTP server for the web dashboard. Uses node:http so the bundle runs on both
+// plain Node (`npx canireach --web`) and Bun (`bunx canireach --web`).
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 
@@ -9,50 +11,75 @@ const SAMPLES_PATH = `${DATA_DIR}samples.jsonl`;
 const STATE_PATH = `${DATA_DIR}state.json`;
 const CONCLUSIONS_PATH = `${DATA_DIR}conclusions.md`;
 
-const server = Bun.serve({
-  port: PORT,
-  async fetch(req) {
-    const url = new URL(req.url);
-    if (url.pathname === "/api/state") {
-      if (!existsSync(STATE_PATH)) return Response.json({ error: "no state yet" }, { status: 503 });
-      const text = await readFile(STATE_PATH, "utf8");
-      return new Response(text, { headers: { "content-type": "application/json" } });
-    }
-    if (url.pathname === "/api/samples") {
-      const limit = parseInt(url.searchParams.get("limit") || "240", 10);
-      const samples = await loadTail(limit);
-      return Response.json({ count: samples.length, samples });
-    }
-    if (url.pathname === "/api/series") {
-      // Compact time-series shaped for charting.
-      const limit = parseInt(url.searchParams.get("limit") || "240", 10);
-      const samples = await loadTail(limit);
-      return Response.json(buildSeries(samples));
-    }
-    if (url.pathname === "/api/conclusions") {
-      const text = existsSync(CONCLUSIONS_PATH) ? await readFile(CONCLUSIONS_PATH, "utf8") : "_(no conclusions yet — the 20-min loop will populate this)_";
-      return new Response(text, { headers: { "content-type": "text/markdown; charset=utf-8" } });
-    }
-    if (url.pathname === "/" || url.pathname === "/index.html") {
-      return serveFile(`${PUBLIC_DIR}index.html`, "text/html; charset=utf-8");
-    }
-    if (url.pathname === "/chart.js") {
-      // Vendored Chart.js (UMD). If missing, fetch from CDN at first request and cache.
-      return serveFile(`${PUBLIC_DIR}chart.js`, "application/javascript; charset=utf-8");
-    }
-    if (url.pathname === "/favicon.svg") {
-      return serveFile(`${PUBLIC_DIR}favicon.svg`, "image/svg+xml");
-    }
-    return new Response("not found", { status: 404 });
-  },
-});
+type Response = { status: number; headers: Record<string, string>; body: string | Buffer };
 
-console.log(`canireach server listening on http://localhost:${server.port}`);
+export function startServer(): ReturnType<typeof createServer> {
+  const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    try {
+      const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+      const out = await route(url);
+      res.writeHead(out.status, out.headers);
+      res.end(out.body);
+    } catch (e) {
+      res.writeHead(500, { "content-type": "text/plain" });
+      res.end(`internal error: ${e}`);
+    }
+  });
+  server.listen(PORT, () => {
+    console.log(`canireach server listening on http://localhost:${PORT}`);
+  });
+  return server;
+}
+
+async function route(url: URL): Promise<Response> {
+  const p = url.pathname;
+
+  if (p === "/api/state") {
+    if (!existsSync(STATE_PATH)) return json({ error: "no state yet" }, 503);
+    return text(await readFile(STATE_PATH, "utf8"), "application/json");
+  }
+  if (p === "/api/samples") {
+    const limit = parseInt(url.searchParams.get("limit") || "240", 10);
+    const samples = await loadTail(limit);
+    return json({ count: samples.length, samples });
+  }
+  if (p === "/api/series") {
+    const limit = parseInt(url.searchParams.get("limit") || "240", 10);
+    const samples = await loadTail(limit);
+    return json(buildSeries(samples));
+  }
+  if (p === "/api/conclusions") {
+    const body = existsSync(CONCLUSIONS_PATH)
+      ? await readFile(CONCLUSIONS_PATH, "utf8")
+      : "_(no conclusions yet — the 20-min loop will populate this)_";
+    return text(body, "text/markdown; charset=utf-8");
+  }
+  if (p === "/" || p === "/index.html") return serveStatic("index.html", "text/html; charset=utf-8");
+  if (p === "/chart.js")                return serveStatic("chart.js", "application/javascript; charset=utf-8");
+  if (p === "/favicon.svg")             return serveStatic("favicon.svg", "image/svg+xml");
+
+  return { status: 404, headers: { "content-type": "text/plain" }, body: "not found" };
+}
+
+function json(obj: unknown, status = 200): Response {
+  return { status, headers: { "content-type": "application/json" }, body: JSON.stringify(obj) };
+}
+function text(body: string, contentType: string, status = 200): Response {
+  return { status, headers: { "content-type": contentType }, body };
+}
+async function serveStatic(name: string, contentType: string): Promise<Response> {
+  try {
+    const data = await readFile(`${PUBLIC_DIR}${name}`);
+    return { status: 200, headers: { "content-type": contentType, "cache-control": "no-store" }, body: data };
+  } catch {
+    return { status: 404, headers: { "content-type": "text/plain" }, body: "not found" };
+  }
+}
 
 async function loadTail(limit: number) {
   if (!existsSync(SAMPLES_PATH)) return [];
-  const text = await readFile(SAMPLES_PATH, "utf8");
-  const lines = text.trim().split("\n");
+  const t = await readFile(SAMPLES_PATH, "utf8");
+  const lines = t.trim().split("\n");
   return lines.slice(-limit).map((l) => {
     try { return JSON.parse(l); } catch { return null; }
   }).filter(Boolean);
@@ -80,8 +107,6 @@ function buildSeries(samples: any[]) {
   const cf  = samples.map((s) => s.pings?.find((x: any) => x.target === "1.1.1.1")?.avgMs ?? null);
   const goo = samples.map((s) => s.pings?.find((x: any) => x.target === "8.8.8.8")?.avgMs ?? null);
 
-  // HTTPS per-label series. Failed requests (timeouts, TLS errors, blocked) become NULL
-  // so the latency chart shows a gap rather than a misleading 8000ms "latency".
   const httpsLabels = new Set<string>();
   for (const s of samples) for (const h of s.https ?? []) httpsLabels.add(h.label);
   const https: Record<string, { totalMs: (number|null)[]; ok: (boolean|null)[]; timedOut: (boolean|null)[] }> = {};
@@ -95,12 +120,11 @@ function buildSeries(samples: any[]) {
     }
   }
 
-  // DNS per-server avg query time on overseas vs domestic domains
   const dnsServers = Array.from(new Set(samples.flatMap((s) => (s.dns ?? []).map((d: any) => d.server))));
   const dns: Record<string, (number | null)[]> = {};
-  for (const server of dnsServers) {
-    dns[server] = samples.map((s) => {
-      const rows = (s.dns ?? []).filter((d: any) => d.server === server);
+  for (const sv of dnsServers) {
+    dns[sv] = samples.map((s) => {
+      const rows = (s.dns ?? []).filter((d: any) => d.server === sv);
       if (rows.length === 0) return null;
       const okRows = rows.filter((r: any) => r.ok);
       if (okRows.length === 0) return null;
@@ -135,13 +159,4 @@ function buildSeries(samples: any[]) {
   };
 
   return { t, verdict, wifi, pings: { gw, ali, cf, goo }, https, dns, proxy, captive, layers, ai };
-}
-
-async function serveFile(path: string, contentType: string): Promise<Response> {
-  try {
-    const data = await readFile(path);
-    return new Response(data, { headers: { "content-type": contentType, "cache-control": "no-store" } });
-  } catch {
-    return new Response("not found", { status: 404 });
-  }
 }

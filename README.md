@@ -6,7 +6,7 @@
 
 ## Quick start
 
-Requires [Bun](https://bun.sh/) (`curl -fsSL https://bun.sh/install | bash`). Then:
+Works under either Node ≥ 18 or [Bun](https://bun.sh/) — whichever you have, the same single-file bundle ships and runs.
 
 ```sh
 npx canireach                # terminal UI (default)
@@ -14,7 +14,7 @@ npx canireach --web          # web dashboard at http://localhost:8787 (opens bro
 npx canireach --once         # one probe → JSON
 ```
 
-`bunx canireach` works the same. If you've cloned the repo, `bun src/cli.ts` is the local equivalent.
+`bunx canireach` is the Bun-runtime equivalent — same code path, different package runner.
 
 ## What it checks
 
@@ -64,7 +64,7 @@ The TUI auto-detects whether a daemon (started via `--web`) is already running. 
 - People connecting via Ethernet / USB-C LAN / Thunderbolt — the Wi-Fi layer is marked "skipped" instead of pretending to be broken.
 - People with **no proxy at all** (overseas direct, or just don't use one) — the proxy layer is marked "skipped" and AI is judged on direct reachability alone.
 
-## Layout (source)
+## Layout
 
 - `src/cli.ts` — entry point. Dispatches between TUI, web, and one-shot.
 - `src/tui.ts` — terminal UI. Raw ANSI + Unicode block cells; no extra deps.
@@ -72,9 +72,30 @@ The TUI auto-detects whether a daemon (started via `--web`) is already running. 
 - `src/probes.ts` — individual probe implementations + proxy/link detection.
 - `src/verdict.ts` — turns a sample into a layered verdict + AI indicator.
 - `src/daemon.ts` — long-running collector. Writes `data/samples.jsonl` + `data/state.json`.
-- `src/server.ts` — Bun HTTP server with JSON APIs over the samples.
+- `src/server.ts` — `node:http` server with JSON APIs over the samples.
 - `public/index.html` — single-page dashboard (Chart.js, vendored).
+- `dist/canireach.mjs` — built single-file bundle. The published `bin`.
 - `data/`, `logs/` — runtime output (gitignored).
+
+## Development
+
+Clone, then run the TypeScript directly under Bun — no build step needed for iteration:
+
+```sh
+git clone https://github.com/canireach/canireach && cd canireach
+bun src/cli.ts                # TUI
+bun src/cli.ts --web          # web dashboard
+bun src/cli.ts --once         # one-shot probe
+```
+
+To produce the published bundle:
+
+```sh
+npm run build                 # writes dist/canireach.mjs (~66 KB)
+node dist/canireach.mjs       # sanity check the bundle under Node
+```
+
+`prepublishOnly` re-runs the build so `npm publish` always ships a fresh bundle.
 
 ## License
 
