@@ -2,8 +2,8 @@
 
 > Live layered diagnostics for restricted / unstable networks. Tells you exactly which layer's at fault — Wi-Fi, LAN, ISP, overseas route, proxy, or upstream AI APIs — and keeps watching. TUI by default, web dashboard under `--web`.
 
-![canireach TUI](docs/screenshot.jpg)
-![canireach web dashboard](docs/screenshot-web.jpg)
+![canireach TUI](https://raw.githubusercontent.com/canireach/canireach/main/docs/screenshot.jpg)
+![canireach web dashboard](https://raw.githubusercontent.com/canireach/canireach/main/docs/screenshot-web.jpg)
 
 ## Quick start
 

@@ -1,6 +1,6 @@
 {
   "name": "canireach",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Local network + AI-service reachability monitor. TUI by default; --web for a Chart.js dashboard. Works with either Node or Bun.",
   "keywords": [
     "network",
