@@ -1,6 +1,6 @@
 # canireach
 
-> Can I reach the AI? Local network + AI-service-availability monitor for this Mac, designed for the unstable / GFW-affected case.
+> Can I reach the AI? Local network + AI-service-availability monitor for this Mac, designed for unstable / restricted-routing networks.
 
 Continuously samples Wi-Fi, LAN, domestic Internet, overseas direct, proxy health, and Anthropic / OpenAI API reachability. The dashboard answers two questions at a glance:
 
@@ -39,7 +39,7 @@ The probe targets a layered diagnosis so a single bad sample tells you *where* t
 | wifi | RSSI > -75, status=connected | weak/disconnected Wi-Fi |
 | lan | ping gateway OK | router / Wi-Fi LAN issue |
 | broadband (domestic) | ping 223.5.5.5 OK, https baidu 200 | ISP / upstream broadband issue |
-| overseas_direct | https cloudflare/github/google direct | usually partial — GFW, informational |
+| overseas_direct | https cloudflare/github/google direct | usually partial — informational, common when overseas routes are restricted |
 | proxy | port 7897 listening, https google via proxy 200, egress IP fetched | local proxy app or upstream node |
 | ai (independent) | Anthropic & OpenAI API endpoints reachable (any HTTP response counts) via proxy and/or direct | proxy down, or AI provider unreachable from both routes |
 

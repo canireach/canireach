@@ -18,7 +18,7 @@ export type AiState = "ok" | "proxy_only" | "direct_only" | "degraded" | "fail" 
 export type Verdict = {
   overall:
     | "healthy"
-    | "gfw_only_proxy_ok"   // domestic works, direct overseas blocked (expected), proxy fine
+    | "direct_blocked_proxy_ok"   // domestic works, direct overseas blocked (expected), proxy fine
     | "proxy_bad"
     | "broadband_bad"
     | "wifi_bad"
@@ -98,7 +98,7 @@ export function judge(s: Sample): Verdict {
     metrics: {},
   });
 
-  // -------- Overseas direct (informational — usually fails behind GFW) --------
+  // -------- Overseas direct (informational — often fails on restricted networks) --------
   const overseasReasons: string[] = [];
   let overseasState: LayerState = "ok";
   if (bbState === "fail" || bbState === "skipped") {
@@ -111,7 +111,7 @@ export function judge(s: Sample): Verdict {
       && !["baidu_direct", "taobao_direct", "anthropic_direct", "openai_direct"].includes(h.label));
     const okCount = probes.filter((h) => h.ok).length;
     if (probes.length === 0) overseasState = "unknown";
-    else if (okCount === 0) { overseasState = "fail"; overseasReasons.push("all direct overseas fail (GFW or blocked)"); }
+    else if (okCount === 0) { overseasState = "fail"; overseasReasons.push("all direct overseas fail (blocked)"); }
     else if (okCount < probes.length) { overseasState = "degraded"; overseasReasons.push(`${okCount}/${probes.length} direct overseas ok`); }
   }
   layers.push({
@@ -204,7 +204,7 @@ export function judge(s: Sample): Verdict {
   else if (lanState === "fail") { overall = "lan_bad"; headline = lanReasons.join("; "); }
   else if (bbState === "fail") { overall = "broadband_bad"; headline = bbReasons.join("; "); }
   else if (proxyState === "fail") { overall = "proxy_bad"; headline = proxyReasons.join("; "); }
-  else if (overseasState === "fail" && proxyState === "ok") { overall = "gfw_only_proxy_ok"; headline = "direct overseas blocked, proxy works"; }
+  else if (overseasState === "fail" && proxyState === "ok") { overall = "direct_blocked_proxy_ok"; headline = "direct overseas blocked, proxy works"; }
   else if ([wifiState, lanState, bbState, proxyState].some((s) => s === "degraded")) {
     overall = "degraded";
     headline = layers.filter((l) => l.state === "degraded" && l.layer !== "ai").flatMap((l) => l.reasons).join("; ") || "some checks slow";

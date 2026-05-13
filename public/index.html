@@ -17,7 +17,7 @@
       --warn: #e6b04c;
       --bad: #ef5364;
       --info: #6a8cff;
-      --gfw: #b485ff;
+      --restricted: #b485ff;
       --skipped: #444c5d;
     }
     * { box-sizing: border-box; }
@@ -48,12 +48,12 @@
     .banner.ok       .icon { background: rgba(52,196,122,0.18); color: var(--ok); }
     .banner.warn     .icon { background: rgba(230,176,76,0.18); color: var(--warn); }
     .banner.bad      .icon { background: rgba(239,83,100,0.18); color: var(--bad); }
-    .banner.gfw      .icon { background: rgba(180,133,255,0.18); color: var(--gfw); }
+    .banner.restricted      .icon { background: rgba(180,133,255,0.18); color: var(--restricted); }
     .banner.unknown  .icon { background: rgba(136,146,166,0.18); color: var(--muted); }
     .banner.ok       { border-color: rgba(52,196,122,0.35); }
     .banner.warn     { border-color: rgba(230,176,76,0.4); }
     .banner.bad      { border-color: rgba(239,83,100,0.45); }
-    .banner.gfw      { border-color: rgba(180,133,255,0.4); }
+    .banner.restricted      { border-color: rgba(180,133,255,0.4); }
     .banner .text    { flex: 1; min-width: 0; }
     .banner .text .heading { display: flex; align-items: baseline; gap: 10px; }
     .banner .text .label { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; flex: none; }
@@ -73,7 +73,7 @@
     .layer-card .status-word.ok      { color: var(--ok); }
     .layer-card .status-word.warn    { color: var(--warn); }
     .layer-card .status-word.bad     { color: var(--bad); }
-    .layer-card .status-word.gfw     { color: var(--gfw); }
+    .layer-card .status-word.restricted     { color: var(--restricted); }
     .layer-card .status-word.skipped { color: var(--muted); }
     .layer-card .status-word.unknown { color: var(--muted); }
     .layer-card .metric { margin-top: 4px; font-size: 11px; color: var(--muted); line-height: 1.4;
@@ -82,12 +82,12 @@
     .layer-card.ok       { border-color: rgba(52,196,122,0.32); }
     .layer-card.warn     { border-color: rgba(230,176,76,0.45); }
     .layer-card.bad      { border-color: rgba(239,83,100,0.5); }
-    .layer-card.gfw      { border-color: rgba(180,133,255,0.32); }
+    .layer-card.restricted      { border-color: rgba(180,133,255,0.32); }
     .layer-card.skipped  { opacity: 0.5; }
     .dot.ok      { background: var(--ok); }
     .dot.warn    { background: var(--warn); }
     .dot.bad     { background: var(--bad); }
-    .dot.gfw     { background: var(--gfw); }
+    .dot.restricted     { background: var(--restricted); }
     .dot.skipped { background: var(--skipped); }
     .dot.unknown { background: var(--muted); opacity: 0.5; }
 
@@ -106,7 +106,7 @@
     .cell.ok        { background: var(--ok); }
     .cell.warn      { background: var(--warn); }
     .cell.bad       { background: var(--bad); }
-    .cell.gfw       { background: var(--gfw); }
+    .cell.restricted       { background: var(--restricted); }
     .cell.skipped   { background: var(--skipped); opacity: 0.6; }
     .cell.unknown   { background: var(--muted); opacity: 0.25; }
     .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 10px; }
@@ -308,7 +308,7 @@
         bannerAiInitialSub: "Anthropic + OpenAI API 可达性",
         // network verdict titles
         netTitle_healthy: "正常",
-        netTitle_gfw_only_proxy_ok: "正常（GFW 屏蔽，代理工作中）",
+        netTitle_direct_blocked_proxy_ok: "正常（海外直连受限，代理工作中）",
         netTitle_degraded: "略慢",
         netTitle_proxy_bad: "代理异常",
         netTitle_broadband_bad: "上游宽带异常",
@@ -317,7 +317,7 @@
         netTitle_unknown: "未知",
         // network verdict subs
         netSub_healthy: "所有检查通过 · 代理通畅 · 国内国际访问均可用",
-        netSub_gfw_only_proxy_ok: "国内畅通，国外直连按预期受限，代理可用 — 大陆机器常态",
+        netSub_direct_blocked_proxy_ok: "国内畅通，海外直连按预期受限，代理可用 — 受限网络下的常态",
         netSub_degraded: "部分检查偏慢或偶发失败",
         netSub_proxy_bad: "国内正常但代理或上游不工作",
         netSub_broadband_bad: "路由器能通，国内公网挂了",
@@ -341,7 +341,7 @@
         aiSub_skipped: "代理挂了且直连也不通，无法判断",
         aiSub_unknown: "等待采样",
         // status words
-        sw_ok: "正常", sw_warn: "略慢", sw_bad: "异常", sw_skipped: "跳过", sw_gfw: "GFW 屏蔽", sw_unknown: "—",
+        sw_ok: "正常", sw_warn: "略慢", sw_bad: "异常", sw_skipped: "跳过", sw_restricted: "海外受限", sw_unknown: "—",
         // layer names (main + sub)
         layerName_wifi: "Wi-Fi",            layerSub_wifi: "wireless",
         layerName_lan: "局域网",            layerSub_lan: "router",
@@ -369,7 +369,7 @@
         timelineRow_proxy: "代理",       timelineRowSub_proxy: "proxy",
         // legend
         legend_ok: "正常",
-        legend_gfw: "仅 GFW 屏蔽（代理可用，正常）",
+        legend_restricted: "仅海外直连受限（代理可用，正常）",
         legend_warn: "有些慢",
         legend_bad: "故障",
         legend_skipped: "跳过（更底层挂了）",
@@ -385,12 +385,12 @@
         tabProxy: "代理",
         tabDns: "DNS",
         // tab help text (HTML)
-        helpPing: '越低越好。<b>网关</b>是你的路由器，正常 1-10ms；<b>223.5.5.5</b> 是国内公共 DNS；<b>1.1.1.1 / 8.8.8.8</b> 是国外公共 DNS（可能丢包，是 GFW 干扰的常见信号）。',
+        helpPing: '越低越好。<b>网关</b>是你的路由器，正常 1-10ms；<b>223.5.5.5</b> 是国内公共 DNS；<b>1.1.1.1 / 8.8.8.8</b> 是国外公共 DNS（可能丢包，是出境链路不稳的常见信号）。',
         helpHttps: '实际打开网页用了多久（毫秒）。<b>direct</b> 是不走代理直连，<b>proxy</b> 是经过代理。<b>失败 / 超时的样本在折线图上显示为断点（gap）</b>，详细成功率看下方表格。',
         helpAi: '<b>Anthropic & OpenAI API 端点可达性。</b>这是「能不能用 Claude / GPT」的最终指标。API 端点对未授权请求会返回 4xx（404/401/421 等），<b>只要返回了任何 HTTP 状态码就算可达</b>。直连在大陆通常会被 Cloudflare 屏蔽或超时，代理是主要通路。',
         helpWifi: '信号强度（dBm，越接近 0 越好；-50 强，-70 一般，-80 以下就不稳了）。发射速率反映 Wi-Fi 协商出来的连接速度。',
         helpProxy: '两张图分别看代理的<b>响应快慢</b>和<b>实际带宽</b>（不同单位，单独看）。下面列出近期出现过的代理出口 IP。',
-        helpDns: '不同 DNS 服务器的查询时间。如果国内 DNS（223.5.5.5 / 119.29.29.29）也变慢，多半是局域网/上游问题；如果只有海外 DNS（8.8.8.8 / 1.1.1.1）变慢或丢失，多半是 GFW 干扰。',
+        helpDns: '不同 DNS 服务器的查询时间。如果国内 DNS（223.5.5.5 / 119.29.29.29）也变慢，多半是局域网/上游问题；如果只有海外 DNS（8.8.8.8 / 1.1.1.1）变慢或丢失，多半是出境链路被过滤。',
         // table headers
         thTarget: "目标", thEndpoint: "端点", thVia: "方式", thRate: "近期成功率",
         thAvgMs: "平均耗时（成功样本）", thAvgMsOk: "平均响应（成功）",
@@ -422,7 +422,7 @@
         bannerLoadingSub: "waiting for first sample",
         bannerAiInitialSub: "Anthropic + OpenAI API reachability",
         netTitle_healthy: "Healthy",
-        netTitle_gfw_only_proxy_ok: "Healthy (GFW blocking, proxy working)",
+        netTitle_direct_blocked_proxy_ok: "Healthy (overseas direct blocked, proxy working)",
         netTitle_degraded: "Slow",
         netTitle_proxy_bad: "Proxy down",
         netTitle_broadband_bad: "Upstream broadband down",
@@ -430,7 +430,7 @@
         netTitle_lan_bad: "LAN down",
         netTitle_unknown: "Unknown",
         netSub_healthy: "All checks pass · proxy OK · domestic & overseas reachable",
-        netSub_gfw_only_proxy_ok: "Domestic OK, overseas direct limited (expected), proxy works — normal for a CN machine",
+        netSub_direct_blocked_proxy_ok: "Domestic OK, overseas direct limited (expected), proxy works — normal on a restricted network",
         netSub_degraded: "Some checks slow or intermittent",
         netSub_proxy_bad: "Domestic OK but proxy or upstream not working",
         netSub_broadband_bad: "Router reachable but domestic Internet is down",
@@ -451,7 +451,7 @@
         aiSub_fail: "Both Anthropic and OpenAI unreachable (proxy & direct both failed)",
         aiSub_skipped: "Proxy down and direct also blocked — cannot determine",
         aiSub_unknown: "Waiting for samples",
-        sw_ok: "OK", sw_warn: "slow", sw_bad: "down", sw_skipped: "skipped", sw_gfw: "GFW blocked", sw_unknown: "—",
+        sw_ok: "OK", sw_warn: "slow", sw_bad: "down", sw_skipped: "skipped", sw_restricted: "blocked", sw_unknown: "—",
         layerName_wifi: "Wi-Fi",             layerSub_wifi: "",
         layerName_lan: "Router",             layerSub_lan: "LAN",
         layerName_broadband: "Domestic",     layerSub_broadband: "CN sites",
@@ -475,7 +475,7 @@
         timelineRow_overseas_direct: "Direct", timelineRowSub_overseas_direct: "overseas",
         timelineRow_proxy: "Proxy",      timelineRowSub_proxy: "",
         legend_ok: "OK",
-        legend_gfw: "GFW-only block (proxy OK, expected)",
+        legend_restricted: "Overseas-direct blocked (proxy OK, expected)",
         legend_warn: "slow",
         legend_bad: "fail",
         legend_skipped: "skipped (lower layer failed)",
@@ -488,12 +488,12 @@
         tabWifi: "Wi-Fi",
         tabProxy: "Proxy",
         tabDns: "DNS",
-        helpPing: 'Lower is better. <b>Gateway</b> is your router, normally 1-10ms; <b>223.5.5.5</b> is a CN public DNS; <b>1.1.1.1 / 8.8.8.8</b> are overseas DNS (loss here is a common GFW interference signal).',
+        helpPing: 'Lower is better. <b>Gateway</b> is your router, normally 1-10ms; <b>223.5.5.5</b> is a CN public DNS; <b>1.1.1.1 / 8.8.8.8</b> are overseas DNS (loss here often signals overseas-route instability).',
         helpHttps: 'Total time to fetch the page (ms). <b>direct</b> bypasses the proxy; <b>proxy</b> goes through it. <b>Failed / timed-out samples are rendered as gaps</b>; see the table below for the actual success rate.',
         helpAi: '<b>Anthropic & OpenAI API reachability.</b> The bottom-line "can I use Claude / GPT?" indicator. These endpoints return 4xx (404/401/421) without auth — <b>any HTTP response counts as reachable</b>. Direct routes are usually blocked by Cloudflare or time out from CN; the proxy is the main path.',
         helpWifi: 'Signal strength (dBm — closer to zero is better; -50 great, -70 ok, below -80 unreliable). Tx rate is the negotiated Wi-Fi link speed.',
         helpProxy: 'Two charts: proxy <b>response latency</b> and actual <b>throughput</b> (different units, kept separate). The list below shows distinct egress IPs seen recently.',
-        helpDns: 'Query time per resolver. If CN DNS (223.5.5.5 / 119.29.29.29) also slows down, it is LAN / upstream; if only overseas DNS (8.8.8.8 / 1.1.1.1) slow or lossy, it is GFW interference.',
+        helpDns: 'Query time per resolver. If CN DNS (223.5.5.5 / 119.29.29.29) also slows down, it is LAN / upstream; if only overseas DNS (8.8.8.8 / 1.1.1.1) slow or lossy, the overseas route is being filtered.',
         thTarget: "target", thEndpoint: "endpoint", thVia: "via", thRate: "recent success",
         thAvgMs: "avg ms (successful)", thAvgMsOk: "avg ms (successful)",
         chart_gateway: "gateway",
@@ -546,10 +546,10 @@
 
     // -------------------- banner content --------------------
     function netBanner(overall) {
-      const icon = { healthy: "✓", gfw_only_proxy_ok: "◇", degraded: "!", proxy_bad: "✕",
+      const icon = { healthy: "✓", direct_blocked_proxy_ok: "◇", degraded: "!", proxy_bad: "✕",
                      broadband_bad: "✕", wifi_bad: "✕", lan_bad: "✕", unknown: "·" }[overall] ?? "·";
       const mood = overall === "healthy" ? "ok"
-                 : overall === "gfw_only_proxy_ok" ? "gfw"
+                 : overall === "direct_blocked_proxy_ok" ? "restricted"
                  : overall === "degraded" ? "warn"
                  : overall === "unknown" ? "unknown"
                  : "bad";
@@ -634,7 +634,7 @@
     }
 
     function bucketForOverseas(latest, layerSt) {
-      if (layerSt === "fail" && latest.verdict?.layers?.find((l) => l.layer === "proxy")?.state === "ok") return "gfw";
+      if (layerSt === "fail" && latest.verdict?.layers?.find((l) => l.layer === "proxy")?.state === "ok") return "restricted";
       return stateBucket(layerSt);
     }
 
@@ -664,7 +664,7 @@
     function renderLegend() {
       const items = [
         ["ok", "var(--ok)"],
-        ["gfw", "var(--gfw)"],
+        ["restricted", "var(--restricted)"],
         ["warn", "var(--warn)"],
         ["bad", "var(--bad)"],
         ["skipped", "var(--skipped);opacity:0.6"],
@@ -691,12 +691,12 @@
           if (key === "overall") {
             const v = arr[i];
             cls = v === "healthy" ? "ok"
-                : v === "gfw_only_proxy_ok" ? "gfw"
+                : v === "direct_blocked_proxy_ok" ? "restricted"
                 : v === "degraded" ? "warn"
                 : v === "unknown" ? "unknown" : "bad";
           } else if (key === "overseas_direct") {
             const st = arr[i], proxySt = series.layers.proxy[i];
-            cls = (st === "fail" && proxySt === "ok") ? "gfw" : stateBucket(st);
+            cls = (st === "fail" && proxySt === "ok") ? "restricted" : stateBucket(st);
           } else {
             cls = stateBucket(arr[i]);
           }

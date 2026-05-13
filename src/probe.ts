@@ -20,7 +20,7 @@ const HTTPS_TARGETS: HttpTarget[] = [
   // Domestic direct
   { label: "baidu_direct", url: "https://www.baidu.com", via: "direct" },
   { label: "taobao_direct", url: "https://www.taobao.com", via: "direct" },
-  // Overseas direct — usually fails behind GFW; useful signal
+  // Overseas direct — often blocked on restricted networks; useful signal
   { label: "google_direct", url: "https://www.google.com", via: "direct" },
   { label: "cloudflare_direct", url: "https://www.cloudflare.com", via: "direct" },
   { label: "github_direct", url: "https://github.com", via: "direct" },
