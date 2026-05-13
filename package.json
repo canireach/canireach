@@ -2,6 +2,25 @@
   "name": "canireach",
   "version": "0.1.0",
   "description": "Local network + AI-service reachability monitor. TUI by default; --web for a Chart.js dashboard.",
+  "keywords": [
+    "network",
+    "monitor",
+    "tui",
+    "dashboard",
+    "ai",
+    "reachability",
+    "proxy"
+  ],
+  "author": "canireach-lab",
+  "license": "MIT",
+  "homepage": "https://github.com/canireach-lab/canireach",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/canireach-lab/canireach.git"
+  },
+  "bugs": {
+    "url": "https://github.com/canireach-lab/canireach/issues"
+  },
   "type": "module",
   "private": true,
   "bin": {
