@@ -1,9 +1,16 @@
-// TUI dashboard. Runs probes in-process, renders to the terminal, keys:
-//   q  quit
-//   l  toggle language (zh / en)
-//   r  refresh now
+// TUI dashboard. Renders to the terminal in two possible modes:
+//   * follow  — a daemon is already running; we just tail data/samples.jsonl
+//   * probe   — no daemon; we run probes ourselves and keep samples in memory
+// Mode is auto-detected on startup by checking whether data/state.json was
+// updated within the last few cycles. Keys: q quit, l zh/en, r refresh now.
 // No external deps — raw ANSI escapes + a tiny CJK-aware width helper.
 import { collectSample, type Sample } from "./probe";
+import { readFile, stat } from "node:fs/promises";
+import { existsSync } from "node:fs";
+
+const DATA_DIR = new URL("../data/", import.meta.url).pathname;
+const SAMPLES_PATH = `${DATA_DIR}samples.jsonl`;
+const STATE_PATH = `${DATA_DIR}state.json`;
 
 // -------- ANSI --------
 const ESC = "\x1b[";
@@ -61,10 +68,12 @@ const T = {
   zh: {
     title: "canireach · 网络与 AI 服务可达性",
     updated: "已更新",
-    cycle: "第 {n} 次采样",
+    cycle: "样本 {n} 条",
     probing: "采集中…",
     waiting: "等待首次采样完成（约 8-10 秒）…",
     keys: "[q] 退出  [l] zh/en  [r] 立即刷新",
+    modeFollow: "跟随 daemon",
+    modeProbe: "进程内采集",
     netLabel: "网络",
     aiLabel: "AI 服务",
     secLayers: "分层状态",
@@ -113,10 +122,12 @@ const T = {
   en: {
     title: "canireach · network + AI reachability",
     updated: "updated",
-    cycle: "cycle #{n}",
+    cycle: "{n} samples",
     probing: "probing…",
     waiting: "Waiting for the first sample (8-10s)…",
     keys: "[q] quit  [l] zh/en  [r] refresh now",
+    modeFollow: "following daemon",
+    modeProbe: "in-process",
     netLabel: "Network",
     aiLabel: "AI",
     secLayers: "Layers",
@@ -179,9 +190,11 @@ function pickLang(): Lang {
 }
 
 const samples: Sample[] = [];
+let mode: "probe" | "follow" = "probe";
 let probing = false;
 let lastErr: string | null = null;
 let spinFrame = 0;
+let lastSamplesMtime = 0;
 const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
 
 // -------- map verdict / layer state to bucket --------
@@ -223,7 +236,8 @@ function render() {
   const updated = samples.length ? new Date(samples[samples.length - 1].t).toLocaleTimeString(lang === "zh" ? "zh-CN" : "en-GB", { hour12: false }) : "—";
   const cycle = tpl(D.cycle, { n: samples.length });
   const spinner = probing ? "  " + COLOR.info + SPINNER[spinFrame % SPINNER.length] + " " + D.probing + RESET : "";
-  out.push(BOLD + D.title + RESET + spinner);
+  const modeTag = COLOR.muted + "  · " + (mode === "follow" ? D.modeFollow : D.modeProbe) + RESET;
+  out.push(BOLD + D.title + RESET + spinner + modeTag);
   out.push(COLOR.muted + `${D.updated} ${updated}  ·  ${cycle}` + RESET);
   out.push("");
 
@@ -397,9 +411,40 @@ function scheduleDraw() {
   }, 50);
 }
 
-// -------- probe loop --------
+// -------- daemon-file follow mode --------
+async function loadSamplesTail(limit = 240): Promise<Sample[]> {
+  if (!existsSync(SAMPLES_PATH)) return [];
+  try {
+    const text = await readFile(SAMPLES_PATH, "utf8");
+    const lines = text.trim().split("\n").slice(-limit);
+    const out: Sample[] = [];
+    for (const l of lines) {
+      try { out.push(JSON.parse(l) as Sample); } catch { /* skip partial line */ }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+// Heuristic: a daemon is "alive" if data/state.json was touched within ~3 cycles.
+async function daemonAlive(): Promise<boolean> {
+  if (!existsSync(STATE_PATH)) return false;
+  try {
+    const text = await readFile(STATE_PATH, "utf8");
+    const state = JSON.parse(text);
+    const updatedAt = new Date(state.updatedAt ?? 0).getTime();
+    const interval = state.interval_ms ?? 60000;
+    return Date.now() - updatedAt < interval * 3;
+  } catch {
+    return false;
+  }
+}
+
+// -------- probe loop (probe mode only) --------
 const INTERVAL_MS = parseInt(process.env.CANIREACH_INTERVAL_MS || "60000", 10);
 let probeTimer: NodeJS.Timeout | null = null;
+let followTimer: NodeJS.Timeout | null = null;
 
 async function probeOnce() {
   probing = true;
@@ -424,6 +469,25 @@ function scheduleNextProbe() {
   }, INTERVAL_MS);
 }
 
+// Poll the daemon's samples.jsonl on a faster cadence than the daemon writes it.
+// We re-read the tail only when the file's mtime changes — cheap, no fs.watch needed.
+async function followPoll() {
+  try {
+    const st = await stat(SAMPLES_PATH);
+    if (st.mtimeMs === lastSamplesMtime) return;
+    lastSamplesMtime = st.mtimeMs;
+    const fresh = await loadSamplesTail(240);
+    if (fresh.length === 0) return;
+    samples.splice(0, samples.length, ...fresh);
+    scheduleDraw();
+  } catch { /* file might not exist yet */ }
+}
+
+function scheduleFollow() {
+  if (followTimer) clearInterval(followTimer);
+  followTimer = setInterval(followPoll, Math.min(15_000, INTERVAL_MS / 3));
+}
+
 // -------- keyboard --------
 function setupKeys() {
   if (process.stdin.isTTY) process.stdin.setRawMode(true);
@@ -434,9 +498,14 @@ function setupKeys() {
     if (s === "q" || s === "\x03") { cleanup(); process.exit(0); }
     if (s === "l") { lang = lang === "zh" ? "en" : "zh"; scheduleDraw(); }
     if (s === "r") {
-      if (probeTimer) clearTimeout(probeTimer);
-      await probeOnce();
-      scheduleNextProbe();
+      if (mode === "follow") {
+        lastSamplesMtime = 0;     // force re-read
+        await followPoll();
+      } else {
+        if (probeTimer) clearTimeout(probeTimer);
+        await probeOnce();
+        scheduleNextProbe();
+      }
     }
   });
 }
@@ -444,6 +513,7 @@ function setupKeys() {
 function cleanup() {
   if (drawTimer) clearTimeout(drawTimer);
   if (probeTimer) clearTimeout(probeTimer);
+  if (followTimer) clearInterval(followTimer);
   process.stdout.write(CURSOR_SHOW + ALT_OFF + RESET + "\n");
   if (process.stdin.isTTY) process.stdin.setRawMode(false);
   process.stdin.pause();
@@ -461,7 +531,21 @@ process.on("SIGTERM", () => { cleanup(); process.exit(0); });
 export async function runTui() {
   process.stdout.write(ALT_ON + CURSOR_HIDE);
   setupKeys();
-  draw();        // initial "waiting…" screen
-  await probeOnce();
-  scheduleNextProbe();
+
+  // Always seed from disk if we have history — instant first frame even in probe mode.
+  const seed = await loadSamplesTail(240);
+  if (seed.length) {
+    samples.push(...seed);
+    try { lastSamplesMtime = (await stat(SAMPLES_PATH)).mtimeMs; } catch {}
+  }
+
+  mode = (await daemonAlive()) ? "follow" : "probe";
+  draw();        // first frame (history if seeded, otherwise "waiting…")
+
+  if (mode === "follow") {
+    scheduleFollow();
+  } else {
+    await probeOnce();
+    scheduleNextProbe();
+  }
 }
