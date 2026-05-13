@@ -1,6 +1,6 @@
 # canireach
 
-> Can I reach the AI? Local network + AI-service-availability monitor — answers "is the network up?" and "is the AI up?" at a glance. TUI by default, web dashboard under `--web`.
+> Live layered diagnostics for restricted / unstable networks. Tells you exactly which layer's at fault — Wi-Fi, LAN, ISP, overseas route, proxy, or upstream AI APIs — and keeps watching. TUI by default, web dashboard under `--web`.
 
 ![canireach TUI](docs/screenshot.jpg)
 
