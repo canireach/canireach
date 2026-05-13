@@ -33,11 +33,19 @@ function startWeb() {
   const bunBin = process.execPath; // when launched via bun, this IS bun
   const daemonPath = resolve(here, "daemon.ts");
   const serverPath = resolve(here, "server.ts");
+  const port = process.env.CANIREACH_PORT || "8787";
+  const url = `http://localhost:${port}`;
 
   console.log(`starting daemon → ${daemonPath}`);
   const daemon = spawn(bunBin, [daemonPath], { stdio: "inherit" });
-  console.log(`starting server → ${serverPath}`);
+  console.log(`starting server → ${url}`);
   const server = spawn(bunBin, [serverPath], { stdio: "inherit" });
+
+  // Auto-open the dashboard once the server has had a moment to bind the port.
+  // The `--no-open` flag (or CANIREACH_NO_OPEN=1) skips it — useful for SSH / CI / headless.
+  if (!has("--no-open") && process.env.CANIREACH_NO_OPEN !== "1") {
+    setTimeout(() => openBrowser(url), 1500);
+  }
 
   const shutdown = () => {
     daemon.kill("SIGTERM");
@@ -50,15 +58,26 @@ function startWeb() {
   server.on("exit", (c) => { console.log(`server exited (${c})`); shutdown(); });
 }
 
+function openBrowser(url: string) {
+  const cmd = process.platform === "darwin" ? "open"
+            : process.platform === "win32" ? "start"
+            : "xdg-open";
+  try {
+    spawn(cmd, [url], { detached: true, stdio: "ignore" }).unref();
+  } catch {
+    // Headless box, no $DISPLAY, etc. — silently skip; user can still hit the URL.
+  }
+}
+
 function printHelp() {
   process.stdout.write(`canireach — local network + AI-service reachability monitor
 
 Usage:
-  canireach              Launch the terminal UI (default; runs probes in-process)
-  canireach --web        Start the dashboard server on http://localhost:8787
-                         (spawns the long-running daemon + bun HTTP server)
-  canireach --once       Run a single probe and print the result as JSON
-  canireach -h, --help   Show this help
+  canireach                Launch the terminal UI (default; runs probes in-process)
+  canireach --web          Start the dashboard server on http://localhost:8787
+                           and open it in your browser (use --no-open to skip)
+  canireach --once         Run a single probe and print the result as JSON
+  canireach -h, --help     Show this help
 
 TUI keys:
   q   quit
@@ -66,9 +85,13 @@ TUI keys:
   r   refresh now
 
 Environment variables:
-  CANIREACH_LANG=zh|en           Force TUI language (overrides $LANG detection)
+  CANIREACH_PROXY=URL            Force this proxy URL for proxy-probes (overrides
+                                 env vars and system proxy detection). Use to point
+                                 at a non-default port. Unset = no override.
+  CANIREACH_LANG=zh|en           Force UI language (otherwise auto-detected)
   CANIREACH_INTERVAL_MS=60000    Probe interval (TUI and daemon)
   CANIREACH_PORT=8787            Dashboard port (web mode only)
   CANIREACH_DOWNLOAD_EVERY=10    Daemon-mode throughput sample cadence
+  CANIREACH_NO_OPEN=1            Don't open the browser in --web mode
 `);
 }

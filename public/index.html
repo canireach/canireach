@@ -358,6 +358,12 @@
         metric_egress: "出口",
         metric_listening: "已监听",
         metric_notListening: "未监听",
+        metric_link_ethernet: "以太网",
+        metric_link_other: "非 Wi-Fi 连接",
+        metric_link_none: "无 Wi-Fi 接口",
+        metric_proxy_none: "未配置代理",
+        metric_ai_proxy: "代理: A={a} O={o}",
+        metric_ai_direct: "直连: A={a} O={o}",
         // timeline
         timelineTitle: "历史时间线",
         timelineHint: "每一小格 = 一次采样（约每分钟一次）。最左边最早，最右边是刚才。",
@@ -465,6 +471,12 @@
         metric_egress: "out",
         metric_listening: "listening",
         metric_notListening: "not listening",
+        metric_link_ethernet: "Ethernet",
+        metric_link_other: "Wired",
+        metric_link_none: "no Wi-Fi interface",
+        metric_proxy_none: "no proxy configured",
+        metric_ai_proxy: "proxy: A={a} O={o}",
+        metric_ai_direct: "direct: A={a} O={o}",
         timelineTitle: "Timeline",
         timelineHint: "Each cell = one sample (~1 per minute). Oldest left, most recent right.",
         timelineRow_overall: "Network",  timelineRowSub_overall: "overall",
@@ -599,8 +611,17 @@
     const LAYER_KEYS = ["wifi", "lan", "broadband", "overseas_direct", "proxy", "ai"];
     function layerMetric(key, s) {
       switch (key) {
-        case "wifi":
+        case "wifi": {
+          // If the active route is wired, show that instead of a meaningless 0 dBm.
+          const linkType = s.iface?.linkType;
+          if (linkType === "ethernet" || linkType === "other") {
+            const port = s.iface?.hardwarePort || "";
+            return port || t("metric_link_" + linkType);
+          }
+          if (s.wifi?.status === "no_interface") return t("metric_link_none");
+          if (s.wifi?.status === "not_wifi")     return t("metric_link_other");
           return s.wifi ? `<span class="mono">${s.wifi.rssi ?? "?"}dBm</span> · ${s.wifi.txRate ?? "?"}Mbps` : "—";
+        }
         case "lan": {
           const gw = s.iface?.gateway, p = s.pings?.find((x) => x.target === gw);
           if (!gw) return "—";
@@ -619,14 +640,24 @@
           return t("metric_reachable", { n: ok, total: dirs.length });
         }
         case "proxy": {
+          // proxyUrl === null means "explicitly no proxy" (new sample shape). undefined means
+          // an older sample that pre-dates the field — fall back to listening/egress.
+          if (s.proxyConfig && s.proxyConfig.proxyUrl === null) return t("metric_proxy_none");
           const eg = s.proxyEgress?.ip;
           if (eg) return `${t("metric_egress")} <span class="mono">${eg}</span>`;
           return s.proxyConfig?.listening ? t("metric_listening") : t("metric_notListening");
         }
         case "ai": {
+          // Same null-vs-undefined distinction: only show "direct only" when proxy was
+          // explicitly absent in this sample. Otherwise use the proxy probes.
+          if (s.proxyConfig && s.proxyConfig.proxyUrl === null) {
+            const aD = s.https?.find((h) => h.label === "anthropic_direct")?.ok;
+            const oD = s.https?.find((h) => h.label === "openai_direct")?.ok;
+            return t("metric_ai_direct", { a: aD ? "✓" : "✕", o: oD ? "✓" : "✕" });
+          }
           const aP = s.https?.find((h) => h.label === "anthropic_proxy")?.ok;
           const oP = s.https?.find((h) => h.label === "openai_proxy")?.ok;
-          return `proxy: A=${aP ? "✓" : "✕"} O=${oP ? "✓" : "✕"}`;
+          return t("metric_ai_proxy", { a: aP ? "✓" : "✕", o: oP ? "✓" : "✕" });
         }
       }
       return "—";

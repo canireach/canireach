@@ -117,6 +117,8 @@ const T = {
     metric: {
       gw: "网关", baidu: "百度", reachable: "{n}/{total} 可达",
       egress: "出口", listening: "已监听", notListening: "未监听", loss: "丢包",
+      linkEthernet: "以太网", linkOther: "非 Wi-Fi 连接", linkNone: "无 Wi-Fi 接口",
+      proxyNone: "未配置代理",
     },
   },
   en: {
@@ -171,6 +173,8 @@ const T = {
     metric: {
       gw: "gw", baidu: "baidu", reachable: "{n}/{total} up",
       egress: "out", listening: "listening", notListening: "not listening", loss: "loss",
+      linkEthernet: "Ethernet", linkOther: "Wired", linkNone: "no Wi-Fi interface",
+      proxyNone: "no proxy configured",
     },
   },
 };
@@ -363,8 +367,15 @@ function render() {
 function layerMetric(s: Sample, key: "wifi" | "lan" | "broadband" | "overseas_direct" | "proxy" | "ai"): string {
   const D = T[lang];
   switch (key) {
-    case "wifi":
+    case "wifi": {
+      const linkType = s.iface?.linkType;
+      if (linkType === "ethernet" || linkType === "other") {
+        return s.iface?.hardwarePort || (D.metric as any).linkEthernet || "Ethernet";
+      }
+      if (s.wifi?.status === "no_interface") return (D.metric as any).linkNone || "no Wi-Fi";
+      if (s.wifi?.status === "not_wifi")     return (D.metric as any).linkOther || "Wired";
       return s.wifi ? `${s.wifi.rssi ?? "?"} dBm · ${s.wifi.txRate ?? "?"} Mbps` : "—";
+    }
     case "lan": {
       const gw = s.iface?.gateway;
       const p = s.pings.find((x) => x.target === gw);
@@ -383,11 +394,19 @@ function layerMetric(s: Sample, key: "wifi" | "lan" | "broadband" | "overseas_di
       return tpl(D.metric.reachable, { n: ok, total: direct.length });
     }
     case "proxy": {
+      // Distinguish "explicitly no proxy" (proxyUrl === null) from older samples that
+      // pre-date the field (proxyUrl === undefined) — the latter falls through normally.
+      if (s.proxyConfig && s.proxyConfig.proxyUrl === null) return (D.metric as any).proxyNone || "no proxy configured";
       const eg = s.proxyEgress?.ip;
       if (eg) return `${D.metric.egress} ${eg}`;
       return s.proxyConfig?.listening ? D.metric.listening : D.metric.notListening;
     }
     case "ai": {
+      if (s.proxyConfig && s.proxyConfig.proxyUrl === null) {
+        const aD = s.https.find((h) => h.label === "anthropic_direct")?.ok;
+        const oD = s.https.find((h) => h.label === "openai_direct")?.ok;
+        return `direct A=${aD ? "✓" : "✕"} O=${oD ? "✓" : "✕"}`;
+      }
       const aP = s.https.find((h) => h.label === "anthropic_proxy")?.ok;
       const oP = s.https.find((h) => h.label === "openai_proxy")?.ok;
       return `proxy A=${aP ? "✓" : "✕"} O=${oP ? "✓" : "✕"}`;

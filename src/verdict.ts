@@ -33,13 +33,22 @@ export type Verdict = {
 export function judge(s: Sample): Verdict {
   const layers: LayerVerdict[] = [];
 
-  // -------- Wi-Fi --------
+  // -------- Wi-Fi / link layer --------
+  // This layer reports the physical link the active route is using. If the user is on
+  // Ethernet / USB-C / Thunderbolt, the Wi-Fi RSSI is irrelevant — "skipped", not "fail".
   const w = s.wifi;
+  const linkType = s.iface?.linkType ?? "unknown";
   const wifiReasons: string[] = [];
   let wifiState: LayerState = "ok";
-  if (!w) {
-    wifiState = "unknown";
-    wifiReasons.push("no wifi data");
+  if (linkType === "ethernet" || linkType === "other") {
+    wifiState = "skipped";
+    wifiReasons.push(`primary link is ${linkType}${s.iface?.hardwarePort ? ` (${s.iface.hardwarePort})` : ""}`);
+  } else if (!w || w.status === "not_wifi") {
+    wifiState = "skipped";
+    wifiReasons.push("primary link is not Wi-Fi");
+  } else if (w.status === "no_interface") {
+    wifiState = "skipped";
+    wifiReasons.push("no Wi-Fi interface");
   } else if (w.status !== "connected") {
     wifiState = "fail";
     wifiReasons.push(`status=${w.status}`);
@@ -57,7 +66,7 @@ export function judge(s: Sample): Verdict {
     layer: "wifi",
     state: wifiState,
     reasons: wifiReasons,
-    metrics: w ? { rssi: w.rssi, noise: w.noise, channel: w.channel, txRate: w.txRate, ssid: w.ssidRedacted ? "<redacted>" : w.ssid } : {},
+    metrics: w ? { rssi: w.rssi, noise: w.noise, channel: w.channel, txRate: w.txRate, ssid: w.ssidRedacted ? "<redacted>" : w.ssid, linkType } : { linkType },
   });
 
   // -------- LAN (gateway reachable) --------
@@ -122,28 +131,49 @@ export function judge(s: Sample): Verdict {
   });
 
   // -------- Proxy --------
+  // Three cases: (1) no proxy configured at all → "skipped", not a fault;
+  //              (2) proxy configured but not listening → "fail";
+  //              (3) proxy configured and listening → eval the via-proxy probes.
   const proxyReasons: string[] = [];
   let proxyState: LayerState = "ok";
-  if (!s.proxyConfig.listening) { proxyState = "fail"; proxyReasons.push("proxy port 7897 not listening"); }
-  else {
+  const proxyConfigured = !!s.proxyConfig.proxyUrl;
+  if (!proxyConfigured) {
+    proxyState = "skipped";
+    proxyReasons.push("no proxy configured");
+  } else if (!s.proxyConfig.listening) {
+    proxyState = "fail";
+    const port = s.proxyConfig.proxyPort;
+    proxyReasons.push(port ? `proxy port ${port} not listening` : "proxy not listening");
+  } else {
     const viaProxy = s.https.filter((h) => h.via === "proxy");
     const okCount = viaProxy.filter((h) => h.ok).length;
     if (viaProxy.length === 0) { proxyState = "unknown"; proxyReasons.push("no proxy HTTPS probes"); }
     else if (okCount === 0) { proxyState = "fail"; proxyReasons.push("all proxy HTTPS fail"); }
     else if (okCount < viaProxy.length) { proxyState = "degraded"; proxyReasons.push(`${okCount}/${viaProxy.length} proxy targets ok`); }
-    if (!s.proxyEgress.ok) { proxyState = worse(proxyState, "degraded"); proxyReasons.push(`egress fetch failed: ${s.proxyEgress.err ?? "unknown"}`); }
-    // System proxy / env mismatch
-    const sc = s.proxyConfig.scutil;
-    if (sc.HTTPEnable && sc.HTTPProxy === "127.0.0.1" && sc.HTTPPort !== 7897) {
+    if (s.proxyEgress && !s.proxyEgress.ok) {
       proxyState = worse(proxyState, "degraded");
-      proxyReasons.push(`system HTTP proxy port ${sc.HTTPPort} != listener 7897`);
+      proxyReasons.push(`egress fetch failed: ${s.proxyEgress.err ?? "unknown"}`);
+    }
+    // Sanity check: if the macOS system proxy is enabled and points at 127.0.0.1, its port
+    // should match what we're actually using. A mismatch suggests stale system config.
+    const sc = s.proxyConfig.scutil;
+    const expectedPort = s.proxyConfig.proxyPort;
+    if (sc.HTTPEnable && sc.HTTPProxy === "127.0.0.1" && expectedPort && sc.HTTPPort !== expectedPort) {
+      proxyState = worse(proxyState, "degraded");
+      proxyReasons.push(`system HTTP proxy port ${sc.HTTPPort} ≠ active ${expectedPort}`);
     }
   }
   layers.push({
     layer: "proxy",
     state: proxyState,
     reasons: proxyReasons,
-    metrics: { listening: s.proxyConfig.listening, egressIp: s.proxyEgress.ip, listenerProcess: s.proxyConfig.listenerProcess },
+    metrics: {
+      configured: proxyConfigured,
+      proxyUrl: s.proxyConfig.proxyUrl,
+      listening: s.proxyConfig.listening,
+      egressIp: s.proxyEgress?.ip ?? null,
+      listenerProcess: s.proxyConfig.listenerProcess,
+    },
   });
 
   // -------- AI services (independent indicator) --------
@@ -158,9 +188,26 @@ export function judge(s: Sample): Verdict {
   const proxyHits = [proxyOk(ant_p), proxyOk(oai_p)].filter(Boolean).length;
   const directHits = [directOk(ant_d), directOk(oai_d)].filter(Boolean).length;
 
+  // No proxy configured at all: AI is judged purely on direct probes (overseas-direct user).
+  // The "direct_only" state code already captures "proxy is not the path; direct is".
+  const noProxy = !s.proxyConfig.proxyUrl;
   let aiState: AiState;
   let aiHeadline: string;
-  if (proxyState === "fail" && !ant_d?.ok && !oai_d?.ok) {
+  if (noProxy) {
+    if (directHits === 2) {
+      aiState = "direct_only";  // reachable, just no proxy in the picture
+      aiHeadline = "Anthropic & OpenAI reachable directly (no proxy in use)";
+    } else if (directHits === 1) {
+      aiState = "degraded";
+      const okName = directOk(ant_d) ? "Anthropic" : "OpenAI";
+      const failName = directOk(ant_d) ? "OpenAI" : "Anthropic";
+      aiHeadline = `Only ${okName} reachable; ${failName} direct failed (no proxy configured)`;
+      aiReasons.push(`${failName} direct: ${(directOk(ant_d) ? oai_d : ant_d)?.err ?? "unknown"}`);
+    } else {
+      aiState = "fail";
+      aiHeadline = "Anthropic & OpenAI both unreachable directly; no proxy configured to fall back on";
+    }
+  } else if (proxyState === "fail" && !ant_d?.ok && !oai_d?.ok) {
     aiState = "skipped";
     aiHeadline = "代理挂了且直连也不通，无法判断";
   } else if (proxyHits === 2 && directHits >= 1) {

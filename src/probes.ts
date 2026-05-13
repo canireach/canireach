@@ -5,7 +5,10 @@ import { run, curlMetrics } from "./util";
 
 // -------- types --------
 export type WifiInfo = {
-  status: "connected" | "disconnected" | "unknown";
+  // `not_wifi` = primary route is via a wired interface; Wi-Fi may or may not be
+  // physically present but is irrelevant. `no_interface` = no Wi-Fi hardware visible.
+  status: "connected" | "disconnected" | "not_wifi" | "no_interface" | "unknown";
+  device: string | null;      // the Wi-Fi device probed (e.g. "en0"), if any
   ssid: string | null;        // may be "<redacted>" on macOS Sequoia+
   ssidRedacted: boolean;
   bssid: string | null;
@@ -20,9 +23,13 @@ export type WifiInfo = {
   raw?: string;
 };
 
+export type LinkType = "wifi" | "ethernet" | "other" | "unknown";
+
 export type InterfaceInfo = {
   primaryService: string | null;
   primaryDevice: string | null;
+  hardwarePort: string | null;   // e.g. "Wi-Fi", "Ethernet Adapter (en3)", "Thunderbolt Bridge"
+  linkType: LinkType;
   ipv4: string | null;
   gateway: string | null;
   subnetMask: string | null;
@@ -70,6 +77,8 @@ export type HttpResult = {
 };
 
 export type ProxyConfig = {
+  proxyUrl: string | null;       // detected proxy URL, or null if no proxy is configured
+  proxyPort: number | null;      // port parsed from proxyUrl (for the listener check)
   envHttp: string | null;
   envHttps: string | null;
   envAll: string | null;
@@ -97,14 +106,54 @@ export type CaptiveResult = {
   totalMs: number;
 };
 
+// -------- Hardware ports --------
+// Parse `networksetup -listallhardwareports` once and look up port info per device.
+async function parseHardwarePorts(): Promise<Map<string, string>> {
+  const r = await run("/usr/sbin/networksetup", ["-listallhardwareports"], { timeoutMs: 2000 });
+  const out = new Map<string, string>();
+  const blocks = r.stdout.split(/\n\s*\n/);
+  for (const blk of blocks) {
+    const port = blk.match(/Hardware Port:\s*([^\n]+)/)?.[1]?.trim();
+    const dev = blk.match(/Device:\s*(\S+)/)?.[1];
+    if (port && dev) out.set(dev, port);
+  }
+  return out;
+}
+
+function classifyLink(hardwarePort: string | null): LinkType {
+  if (!hardwarePort) return "unknown";
+  const lower = hardwarePort.toLowerCase();
+  if (lower.includes("wi-fi") || lower.includes("wifi") || lower.includes("airport")) return "wifi";
+  if (lower.includes("ethernet") || lower.includes("lan") || lower.includes("usb 10/100")
+      || lower.includes("thunderbolt bridge")) return "ethernet";
+  return "other";
+}
+
 // -------- WiFi --------
-export async function probeWifi(): Promise<WifiInfo> {
-  // `ipconfig getsummary en0` exposes SSID/BSSID without sudo on recent macOS.
+export async function probeWifi(primaryDevice: string | null, ports?: Map<string, string>): Promise<WifiInfo> {
+  // Empty WifiInfo helper.
+  const empty = (status: WifiInfo["status"], device: string | null): WifiInfo => ({
+    status, device, ssid: null, ssidRedacted: false, bssid: null, channel: null, band: null,
+    rssi: null, noise: null, txRate: null, phyMode: null, security: null, countryCode: null,
+  });
+
+  const hardware = ports ?? await parseHardwarePorts();
+  // Pick the Wi-Fi device dynamically. If the primary route is via a non-Wi-Fi device,
+  // that's the more important fact — short-circuit with "not_wifi".
+  let wifiDev: string | null = null;
+  for (const [dev, port] of hardware) {
+    if (classifyLink(port) === "wifi") { wifiDev = dev; break; }
+  }
+  if (primaryDevice && primaryDevice !== wifiDev) {
+    return empty("not_wifi", wifiDev);
+  }
+  if (!wifiDev) return empty("no_interface", null);
+
+  // `ipconfig getsummary <device>` exposes SSID/BSSID without sudo on recent macOS.
   // SSID will be literal "<redacted>" unless the app has location permission.
-  const r = await run("/usr/sbin/ipconfig", ["getsummary", "en0"], { timeoutMs: 3000 });
+  const r = await run("/usr/sbin/ipconfig", ["getsummary", wifiDev], { timeoutMs: 3000 });
   const sp = await run("/usr/sbin/system_profiler", ["SPAirPortDataType", "-detailLevel", "basic"], { timeoutMs: 6000 });
 
-  const text = r.stdout + "\n" + sp.stdout;
   const ssidMatch = sp.stdout.match(/Current Network Information:\s*\n\s+([^\n:]+):/);
   const bssidMatch = r.stdout.match(/BSSID\s*:\s*([^\n]+)/) ?? sp.stdout.match(/BSSID:\s*([^\n]+)/);
   const channelMatch = sp.stdout.match(/Current Network Information:[\s\S]*?Channel:\s*(\d+)\s*\((\d+)GHz/);
@@ -120,12 +169,13 @@ export async function probeWifi(): Promise<WifiInfo> {
   const band = bandGhz === "2" ? "2.4" : bandGhz === "5" ? "5" : bandGhz === "6" ? "6" : null;
 
   const statusMatch = sp.stdout.match(/Status:\s*(\w+)/);
-  const status = statusMatch
+  const status: WifiInfo["status"] = statusMatch
     ? (statusMatch[1].toLowerCase() === "connected" ? "connected" : "disconnected")
     : "unknown";
 
   return {
     status,
+    device: wifiDev,
     ssid,
     ssidRedacted: ssid === "<redacted>" || ssid === "redacted",
     bssid: bssidMatch ? bssidMatch[1].trim() : null,
@@ -141,7 +191,7 @@ export async function probeWifi(): Promise<WifiInfo> {
 }
 
 // -------- Interface / route --------
-export async function probeInterface(): Promise<InterfaceInfo> {
+export async function probeInterface(ports?: Map<string, string>): Promise<InterfaceInfo> {
   const def = await run("/sbin/route", ["-n", "get", "default"], { timeoutMs: 2000 });
   const gateway = def.stdout.match(/gateway:\s*(\S+)/)?.[1] ?? null;
   const dev = def.stdout.match(/interface:\s*(\S+)/)?.[1] ?? null;
@@ -153,7 +203,12 @@ export async function probeInterface(): Promise<InterfaceInfo> {
   const dnsLine = summary?.stdout.match(/domain_name_server \(ip_mult\):\s*\{([^}]*)\}/)?.[1] ?? "";
   const dhcpDns = dnsLine.split(",").map((s) => s.trim()).filter(Boolean);
 
-  // Map device -> service name via networksetup
+  // Map device → hardware port (Wi-Fi, Ethernet Adapter, etc.) for link-type classification.
+  const hardware = ports ?? await parseHardwarePorts();
+  const hardwarePort = dev ? (hardware.get(dev) ?? null) : null;
+  const linkType = classifyLink(hardwarePort);
+
+  // Map device → service name via networksetup (used for the user-facing service label).
   const services = await run("/usr/sbin/networksetup", ["-listnetworkserviceorder"], { timeoutMs: 2000 });
   let primaryService: string | null = null;
   if (dev) {
@@ -165,6 +220,8 @@ export async function probeInterface(): Promise<InterfaceInfo> {
   return {
     primaryService,
     primaryDevice: dev,
+    hardwarePort,
+    linkType,
     ipv4,
     gateway,
     subnetMask: mask,
@@ -270,8 +327,45 @@ export async function probeHttps(targets: HttpTarget[], proxy?: string): Promise
   );
 }
 
+// -------- proxy detection --------
+// Resolution order:
+//   1. CANIREACH_PROXY env override
+//   2. Standard env vars (https_proxy / http_proxy / all_proxy)
+//   3. macOS system proxy (`scutil --proxy`)
+//   4. null  ⇒ no proxy; the verdict treats this as "skipped", not "fail"
+export async function detectProxyUrl(): Promise<string | null> {
+  const override = process.env.CANIREACH_PROXY?.trim();
+  if (override === "none" || override === "off") return null;   // explicit opt-out
+  if (override) return override;
+
+  const env = process.env.https_proxy || process.env.HTTPS_PROXY
+           || process.env.http_proxy  || process.env.HTTP_PROXY
+           || process.env.all_proxy   || process.env.ALL_PROXY;
+  if (env && env.trim()) return env.trim();
+
+  const sc = await run("/usr/sbin/scutil", ["--proxy"], { timeoutMs: 2000 });
+  const httpsEn = /HTTPSEnable\s*:\s*1/.test(sc.stdout);
+  const httpEn  = /HTTPEnable\s*:\s*1/.test(sc.stdout);
+  if (httpsEn) {
+    const host = sc.stdout.match(/HTTPSProxy\s*:\s*(\S+)/)?.[1];
+    const port = sc.stdout.match(/HTTPSPort\s*:\s*(\d+)/)?.[1];
+    if (host && port) return `http://${host}:${port}`;
+  }
+  if (httpEn) {
+    const host = sc.stdout.match(/HTTPProxy\s*:\s*(\S+)/)?.[1];
+    const port = sc.stdout.match(/HTTPPort\s*:\s*(\d+)/)?.[1];
+    if (host && port) return `http://${host}:${port}`;
+  }
+  return null;
+}
+
+function portFromProxyUrl(url: string | null): number | null {
+  if (!url) return null;
+  try { return parseInt(new URL(url).port, 10) || null; } catch { return null; }
+}
+
 // -------- proxy config + egress --------
-export async function probeProxyConfig(): Promise<ProxyConfig> {
+export async function probeProxyConfig(proxyUrl: string | null): Promise<ProxyConfig> {
   const sc = await run("/usr/sbin/scutil", ["--proxy"], { timeoutMs: 2000 });
   const raw = sc.stdout;
   const num = (k: string) => {
@@ -284,13 +378,20 @@ export async function probeProxyConfig(): Promise<ProxyConfig> {
   };
   const bool = (k: string) => num(k) === 1;
 
-  // Listener check
-  const ls = await run("/usr/sbin/lsof", ["-nP", "-iTCP:7897", "-sTCP:LISTEN"], { timeoutMs: 2000 });
-  const listening = ls.stdout.includes("LISTEN");
-  const procMatch = ls.stdout.split("\n").find((l) => l.includes("LISTEN"));
-  const listenerProcess = procMatch ? procMatch.trim().split(/\s+/)[0] : null;
+  // Listener check — only run lsof if we actually have a proxy port to look at.
+  let listening = false;
+  let listenerProcess: string | null = null;
+  const port = portFromProxyUrl(proxyUrl);
+  if (port) {
+    const ls = await run("/usr/sbin/lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN"], { timeoutMs: 2000 });
+    listening = ls.stdout.includes("LISTEN");
+    const procMatch = ls.stdout.split("\n").find((l) => l.includes("LISTEN"));
+    listenerProcess = procMatch ? procMatch.trim().split(/\s+/)[0] : null;
+  }
 
   return {
+    proxyUrl,
+    proxyPort: port,
     envHttp: process.env.http_proxy ?? process.env.HTTP_PROXY ?? null,
     envHttps: process.env.https_proxy ?? process.env.HTTPS_PROXY ?? null,
     envAll: process.env.all_proxy ?? process.env.ALL_PROXY ?? null,
