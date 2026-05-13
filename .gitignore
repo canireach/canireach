@@ -1,0 +1,8 @@
+# Runtime output — recreated on every daemon start, no need to track.
+logs/
+data/
+
+# bun + node housekeeping
+node_modules/
+bun.lockb
+.DS_Store

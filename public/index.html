@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>netmon · local network monitor</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #161a22;
+      --panel-2: #1c2230;
+      --fg: #e6eaf2;
+      --muted: #8892a6;
+      --border: #232a38;
+      --ok: #2fbf71;
+      --degraded: #d7a32b;
+      --fail: #e25563;
+      --proxy: #6a8cff;
+      --gfw: #c78bff;
+      --skipped: #4b5468;
+      --unknown: #4b5468;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+      font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Mono", "Menlo", monospace; }
+    header { padding: 14px 20px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    header h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: 0.5px; }
+    header .pill { padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+    .pill.healthy { background: rgba(47,191,113,0.15); color: var(--ok); }
+    .pill.gfw_only_proxy_ok { background: rgba(199,139,255,0.15); color: var(--gfw); }
+    .pill.degraded { background: rgba(215,163,43,0.15); color: var(--degraded); }
+    .pill.proxy_bad, .pill.wifi_bad, .pill.lan_bad, .pill.broadband_bad { background: rgba(226,85,99,0.15); color: var(--fail); }
+    .pill.unknown { background: rgba(75,84,104,0.25); color: var(--muted); }
+    .muted { color: var(--muted); }
+    main { padding: 16px 20px 60px; display: grid; gap: 16px;
+      grid-template-columns: repeat(12, 1fr); }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+      padding: 12px 14px; min-height: 80px; }
+    .panel h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em; }
+    .span-3 { grid-column: span 3; } .span-4 { grid-column: span 4; }
+    .span-6 { grid-column: span 6; } .span-8 { grid-column: span 8; } .span-12 { grid-column: span 12; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table th, table td { padding: 4px 6px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+    table th { color: var(--muted); font-weight: 500; }
+    .kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; font-size: 12px; }
+    .kv dt { color: var(--muted); }
+    .kv dd { margin: 0; }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      vertical-align: 1px; margin-right: 6px; background: var(--unknown); }
+    .status-ok { background: var(--ok); } .status-degraded { background: var(--degraded); }
+    .status-fail { background: var(--fail); } .status-skipped { background: var(--skipped); }
+    .status-unknown { background: var(--unknown); }
+    canvas { width: 100% !important; height: 220px !important; }
+    .heatmap { display: grid; gap: 2px; }
+    .heatmap .cell { height: 14px; border-radius: 2px; }
+    .heatmap-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .heatmap-row .label { width: 130px; flex: none; font-size: 11px; color: var(--muted); }
+    .heatmap-row .cells { display: grid; grid-auto-flow: column; grid-auto-columns: 6px; gap: 1px; flex: 1; }
+    .cells .cell { height: 16px; border-radius: 2px; }
+    .cell.ok        { background: var(--ok); }
+    .cell.degraded  { background: var(--degraded); }
+    .cell.fail      { background: var(--fail); }
+    .cell.skipped   { background: var(--skipped); }
+    .cell.unknown   { background: var(--unknown); opacity: 0.4; }
+    pre { white-space: pre-wrap; word-break: break-word; font-size: 11px; color: var(--fg);
+      background: var(--panel-2); padding: 8px; border-radius: 4px; max-height: 280px; overflow: auto; }
+    .conc { max-height: 360px; overflow: auto; }
+    .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+    .legend span { display: inline-flex; align-items: center; gap: 4px; }
+    .legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>netmon</h1>
+    <span class="muted" id="updated">loading…</span>
+    <span class="pill unknown" id="verdict-pill">unknown</span>
+    <span class="muted" id="headline"></span>
+    <span style="flex: 1"></span>
+    <span class="muted" id="cycle"></span>
+  </header>
+
+  <main>
+    <section class="panel span-4">
+      <h2>Current verdict — layered</h2>
+      <table id="layers-table">
+        <thead><tr><th>layer</th><th>state</th><th>notes</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="panel span-4">
+      <h2>WiFi · interface</h2>
+      <dl class="kv" id="wifi-kv"></dl>
+    </section>
+
+    <section class="panel span-4">
+      <h2>Proxy</h2>
+      <dl class="kv" id="proxy-kv"></dl>
+    </section>
+
+    <section class="panel span-12">
+      <h2>Verdict timeline (each column = 1 sample)</h2>
+      <div class="heatmap" id="heatmap"></div>
+      <div class="legend" style="margin-top:8px">
+        <span><span class="swatch" style="background:var(--ok)"></span>ok</span>
+        <span><span class="swatch" style="background:var(--degraded)"></span>degraded</span>
+        <span><span class="swatch" style="background:var(--fail)"></span>fail</span>
+        <span><span class="swatch" style="background:var(--skipped)"></span>skipped (dep failed)</span>
+        <span><span class="swatch" style="background:var(--unknown);opacity:0.4"></span>unknown / missing</span>
+      </div>
+    </section>
+
+    <section class="panel span-6">
+      <h2>Ping RTT (ms)</h2>
+      <canvas id="chart-pings"></canvas>
+    </section>
+
+    <section class="panel span-6">
+      <h2>WiFi RSSI &amp; tx-rate</h2>
+      <canvas id="chart-wifi"></canvas>
+    </section>
+
+    <section class="panel span-6">
+      <h2>HTTPS total time (ms) — direct vs proxy</h2>
+      <canvas id="chart-https"></canvas>
+    </section>
+
+    <section class="panel span-6">
+      <h2>DNS query time (ms) by resolver</h2>
+      <canvas id="chart-dns"></canvas>
+    </section>
+
+    <section class="panel span-6">
+      <h2>Proxy egress IP &amp; download throughput</h2>
+      <canvas id="chart-proxy"></canvas>
+      <div id="egress-list" class="muted" style="margin-top:6px;font-size:11px"></div>
+    </section>
+
+    <section class="panel span-6">
+      <h2>Rolling HTTPS success rate (last window)</h2>
+      <table id="https-table">
+        <thead><tr><th>target</th><th>via</th><th>ok / total</th><th>avg ms</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="panel span-12">
+      <h2>Latest conclusions (updated by the 20-min loop)</h2>
+      <pre class="conc" id="conclusions">loading…</pre>
+    </section>
+
+    <section class="panel span-12">
+      <h2>Raw latest sample</h2>
+      <pre id="latest-raw">loading…</pre>
+    </section>
+  </main>
+
+  <script src="/chart.js"></script>
+  <script>
+    const charts = {};
+    const COLORS = {
+      gw: "#6a8cff", ali: "#2fbf71", cf: "#d7a32b", goo: "#e25563",
+      direct: "#2fbf71", proxy: "#6a8cff",
+      dnsSys: "#e6eaf2", dnsAli: "#2fbf71", dnsTencent: "#d7a32b",
+      dnsGoo: "#e25563", dnsCf: "#c78bff",
+    };
+
+    async function fetchJson(path) { const r = await fetch(path); return r.ok ? r.json() : null; }
+    async function fetchText(path) { const r = await fetch(path); return r.ok ? r.text() : null; }
+
+    function fmtTime(iso) {
+      try { return new Date(iso).toLocaleTimeString([], { hour12: false }); } catch { return iso; }
+    }
+    function shortTimes(arr) { return arr.map(fmtTime); }
+
+    function dotClass(state) {
+      return "status-dot status-" + (state || "unknown");
+    }
+
+    function renderLayers(layers) {
+      const tb = document.querySelector("#layers-table tbody");
+      tb.innerHTML = "";
+      for (const l of layers) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${l.layer}</td>
+          <td><span class="${dotClass(l.state)}"></span>${l.state}</td>
+          <td>${(l.reasons||[]).join("; ") || "<span class='muted'>—</span>"}</td>`;
+        tb.appendChild(tr);
+      }
+    }
+
+    function renderKV(el, entries) {
+      el.innerHTML = "";
+      for (const [k, v] of entries) {
+        const dt = document.createElement("dt"); dt.textContent = k;
+        const dd = document.createElement("dd"); dd.innerHTML = v == null ? "<span class='muted'>—</span>" : v;
+        el.appendChild(dt); el.appendChild(dd);
+      }
+    }
+
+    function renderHeatmap(series) {
+      const el = document.getElementById("heatmap");
+      el.innerHTML = "";
+      const layers = ["wifi", "lan", "broadband", "overseas_direct", "proxy"];
+      const verdictRow = document.createElement("div");
+      verdictRow.className = "heatmap-row";
+      verdictRow.innerHTML = `<span class="label">overall</span><div class="cells"></div>`;
+      const cells = verdictRow.querySelector(".cells");
+      for (let i = 0; i < series.verdict.length; i++) {
+        const v = series.verdict[i];
+        const stateClass = v === "healthy" || v === "gfw_only_proxy_ok" ? "ok"
+                       : v === "degraded" ? "degraded"
+                       : v === "unknown" ? "unknown" : "fail";
+        const c = document.createElement("div");
+        c.className = `cell ${stateClass}`;
+        c.title = `${fmtTime(series.t[i])}  ${v}`;
+        cells.appendChild(c);
+      }
+      el.appendChild(verdictRow);
+
+      for (const layer of layers) {
+        const row = document.createElement("div");
+        row.className = "heatmap-row";
+        row.innerHTML = `<span class="label">${layer}</span><div class="cells"></div>`;
+        const cells = row.querySelector(".cells");
+        const arr = series.layers[layer] || [];
+        for (let i = 0; i < arr.length; i++) {
+          const st = arr[i] || "unknown";
+          const c = document.createElement("div");
+          c.className = `cell ${st}`;
+          c.title = `${fmtTime(series.t[i])}  ${layer}: ${st}`;
+          cells.appendChild(c);
+        }
+        el.appendChild(row);
+      }
+    }
+
+    function makeOrUpdateLine(id, labels, datasets, yOpts) {
+      const cfg = {
+        type: "line",
+        data: { labels, datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          interaction: { mode: "index", intersect: false },
+          scales: {
+            x: { ticks: { color: "#8892a6", maxTicksLimit: 6 }, grid: { color: "#232a38" } },
+            y: Object.assign({ ticks: { color: "#8892a6" }, grid: { color: "#232a38" } }, yOpts || {}),
+          },
+          plugins: {
+            legend: { labels: { color: "#e6eaf2", font: { size: 11 } } },
+          },
+        },
+      };
+      if (charts[id]) {
+        charts[id].data = cfg.data;
+        charts[id].options = cfg.options;
+        charts[id].update();
+      } else {
+        charts[id] = new Chart(document.getElementById(id), cfg);
+      }
+    }
+
+    function renderPings(series) {
+      const labels = shortTimes(series.t);
+      makeOrUpdateLine("chart-pings", labels, [
+        { label: "gateway", data: series.pings.gw, borderColor: COLORS.gw, backgroundColor: COLORS.gw, tension: 0.25, spanGaps: true },
+        { label: "223.5.5.5 (CN)", data: series.pings.ali, borderColor: COLORS.ali, backgroundColor: COLORS.ali, tension: 0.25, spanGaps: true },
+        { label: "1.1.1.1", data: series.pings.cf, borderColor: COLORS.cf, backgroundColor: COLORS.cf, tension: 0.25, spanGaps: true },
+        { label: "8.8.8.8", data: series.pings.goo, borderColor: COLORS.goo, backgroundColor: COLORS.goo, tension: 0.25, spanGaps: true },
+      ], { suggestedMin: 0 });
+    }
+
+    function renderWifi(series) {
+      const labels = shortTimes(series.t);
+      makeOrUpdateLine("chart-wifi", labels, [
+        { label: "RSSI (dBm)", data: series.wifi.rssi, yAxisID: "y", borderColor: "#6a8cff", tension: 0.2, spanGaps: true },
+        { label: "tx rate (Mbps)", data: series.wifi.txRate, yAxisID: "y1", borderColor: "#d7a32b", tension: 0.2, spanGaps: true },
+      ], {});
+      // Add second axis via reconfig — Chart.js needs both axes declared. Reconfigure if missing.
+      const c = charts["chart-wifi"];
+      c.options.scales = {
+        x: c.options.scales.x,
+        y: { position: "left", ticks: { color: "#6a8cff" }, grid: { color: "#232a38" }, suggestedMax: -20, suggestedMin: -90, title: { display: true, text: "dBm", color: "#6a8cff" } },
+        y1: { position: "right", ticks: { color: "#d7a32b" }, grid: { display: false }, suggestedMin: 0, title: { display: true, text: "Mbps", color: "#d7a32b" } },
+      };
+      c.update();
+    }
+
+    function renderHttps(series) {
+      const labels = shortTimes(series.t);
+      const ds = [];
+      const palette = ["#2fbf71","#6a8cff","#d7a32b","#e25563","#c78bff","#e6eaf2","#5ed3f3","#ff8b3d","#a6e22e"];
+      let i = 0;
+      for (const [lbl, info] of Object.entries(series.https)) {
+        ds.push({ label: lbl, data: info.totalMs, borderColor: palette[i % palette.length], tension: 0.2, spanGaps: true, borderWidth: 1.2, pointRadius: 0 });
+        i++;
+      }
+      makeOrUpdateLine("chart-https", labels, ds, { suggestedMin: 0 });
+    }
+
+    function renderDns(series) {
+      const labels = shortTimes(series.t);
+      const ds = [];
+      const palette = { system: "#e6eaf2", "223.5.5.5": "#2fbf71", "119.29.29.29": "#d7a32b", "8.8.8.8": "#e25563", "1.1.1.1": "#c78bff" };
+      for (const [server, arr] of Object.entries(series.dns)) {
+        ds.push({ label: server, data: arr, borderColor: palette[server] || "#888", tension: 0.2, spanGaps: true });
+      }
+      makeOrUpdateLine("chart-dns", labels, ds, { suggestedMin: 0 });
+    }
+
+    function renderProxy(series) {
+      const labels = shortTimes(series.t);
+      makeOrUpdateLine("chart-proxy", labels, [
+        { label: "egress fetch ms", data: series.proxy.egressMs, borderColor: "#6a8cff", tension: 0.2, spanGaps: true },
+        { label: "download Mbps (when sampled)", data: series.proxy.downloadMbps, borderColor: "#2fbf71", tension: 0.2, spanGaps: true, pointRadius: 3 },
+      ], { suggestedMin: 0 });
+      const counts = {};
+      for (const ip of series.proxy.egressIp) if (ip) counts[ip] = (counts[ip] || 0) + 1;
+      const list = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([ip, n]) => `${ip} ×${n}`).join("  ·  ");
+      document.getElementById("egress-list").textContent = "egress IPs seen: " + (list || "(none)");
+    }
+
+    function renderHttpsTable(state) {
+      const tb = document.querySelector("#https-table tbody");
+      tb.innerHTML = "";
+      const agg = state?.rolling?.httpsAgg || {};
+      const sorted = Object.entries(agg).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+      for (const [label, info] of sorted) {
+        const via = label.endsWith("_proxy") ? "proxy" : "direct";
+        const rate = info.total ? `${info.ok}/${info.total}` : "—";
+        const tr = document.createElement("tr");
+        const ok = info.total ? info.ok / info.total : 0;
+        const colorCls = ok === 1 ? "status-ok" : ok > 0 ? "status-degraded" : "status-fail";
+        tr.innerHTML = `<td>${label}</td><td>${via}</td>
+          <td><span class="status-dot ${colorCls}"></span>${rate}</td>
+          <td>${info.avgMs ? info.avgMs.toFixed(0) : "—"}</td>`;
+        tb.appendChild(tr);
+      }
+    }
+
+    async function refresh() {
+      const state = await fetchJson("/api/state");
+      const series = await fetchJson("/api/series?limit=240");
+      const conclusions = await fetchText("/api/conclusions");
+      if (!state) {
+        document.getElementById("updated").textContent = "(no samples yet — waiting for daemon)";
+        return;
+      }
+      document.getElementById("updated").textContent = "updated " + new Date(state.updatedAt).toLocaleString();
+      document.getElementById("cycle").textContent = `cycle #${state.cycle} · interval ${Math.round(state.interval_ms/1000)}s`;
+      const pill = document.getElementById("verdict-pill");
+      pill.className = "pill " + state.latest.verdict.overall;
+      pill.textContent = state.latest.verdict.overall;
+      document.getElementById("headline").textContent = state.latest.verdict.headline;
+      renderLayers(state.latest.verdict.layers);
+
+      const w = state.latest.wifi || {};
+      const iface = state.latest.iface || {};
+      renderKV(document.getElementById("wifi-kv"), [
+        ["SSID", w.ssidRedacted ? "<em>&lt;redacted by macOS&gt;</em>" : w.ssid],
+        ["BSSID", w.bssid],
+        ["channel / band", w.channel ? `${w.channel} (${w.band} GHz)` : null],
+        ["signal", w.rssi != null ? `${w.rssi} dBm` : null],
+        ["noise", w.noise != null ? `${w.noise} dBm` : null],
+        ["tx rate", w.txRate ? `${w.txRate} Mbps` : null],
+        ["phy", w.phyMode],
+        ["primary if", iface.primaryDevice ? `${iface.primaryDevice} (${iface.primaryService ?? "?"})` : null],
+        ["ip", iface.ipv4],
+        ["gateway", iface.gateway],
+        ["DHCP DNS", (iface.dhcpDns || []).join(", ")],
+      ]);
+
+      const pc = state.latest.proxyConfig || {};
+      const sc = pc.scutil || {};
+      renderKV(document.getElementById("proxy-kv"), [
+        ["listening", pc.listening ? `yes (${pc.listenerProcess ?? "?"})` : "no"],
+        ["system HTTP",  sc.HTTPEnable ? `${sc.HTTPProxy}:${sc.HTTPPort}` : "off"],
+        ["system HTTPS", sc.HTTPSEnable ? `${sc.HTTPSProxy}:${sc.HTTPSPort}` : "off"],
+        ["system SOCKS", sc.SOCKSEnable ? `${sc.SOCKSProxy}:${sc.SOCKSPort}` : "off"],
+        ["env http_proxy", pc.envHttp],
+        ["env https_proxy", pc.envHttps],
+        ["env all_proxy", pc.envAll],
+        ["egress IP", state.latest.proxyEgress?.ip],
+        ["egress fetch", state.latest.proxyEgress?.ok ? `${state.latest.proxyEgress.ms.toFixed(0)}ms` : `<span class='muted'>${state.latest.proxyEgress?.err ?? "—"}</span>`],
+        ["last DL (Mbps)", state.latest.proxyDownload?.mbps ? state.latest.proxyDownload.mbps.toFixed(1) : null],
+      ]);
+
+      if (series) {
+        renderHeatmap(series);
+        renderPings(series);
+        renderWifi(series);
+        renderHttps(series);
+        renderDns(series);
+        renderProxy(series);
+      }
+      renderHttpsTable(state);
+
+      document.getElementById("conclusions").textContent = conclusions ?? "(no conclusions yet)";
+      document.getElementById("latest-raw").textContent = JSON.stringify(state.latest, null, 2);
+    }
+
+    refresh();
+    setInterval(refresh, 15000);
+  </script>
+</body>
+</html>
