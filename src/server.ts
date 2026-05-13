@@ -40,6 +40,9 @@ const server = Bun.serve({
       // Vendored Chart.js (UMD). If missing, fetch from CDN at first request and cache.
       return serveFile(`${PUBLIC_DIR}chart.js`, "application/javascript; charset=utf-8");
     }
+    if (url.pathname === "/favicon.svg") {
+      return serveFile(`${PUBLIC_DIR}favicon.svg`, "image/svg+xml");
+    }
     return new Response("not found", { status: 404 });
   },
 });
