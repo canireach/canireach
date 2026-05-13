@@ -361,7 +361,6 @@
         timelineTitle: "历史时间线",
         timelineHint: "每一小格 = 一次采样（约每分钟一次）。最左边最早，最右边是刚才。",
         timelineRow_overall: "网络总体", timelineRowSub_overall: "network",
-        timelineRow_ai: "AI 服务",       timelineRowSub_ai: "claude/gpt",
         timelineRow_wifi: "Wi-Fi",       timelineRowSub_wifi: "",
         timelineRow_lan: "局域网",       timelineRowSub_lan: "router",
         timelineRow_broadband: "国内",   timelineRowSub_broadband: "domestic",
@@ -468,7 +467,6 @@
         timelineTitle: "Timeline",
         timelineHint: "Each cell = one sample (~1 per minute). Oldest left, most recent right.",
         timelineRow_overall: "Network",  timelineRowSub_overall: "overall",
-        timelineRow_ai: "AI",            timelineRowSub_ai: "claude/gpt",
         timelineRow_wifi: "Wi-Fi",       timelineRowSub_wifi: "",
         timelineRow_lan: "Router",       timelineRowSub_lan: "LAN",
         timelineRow_broadband: "Domestic", timelineRowSub_broadband: "CN",
@@ -678,12 +676,14 @@
     function renderHeatmap(series) {
       const root = $("#heatmap");
       root.innerHTML = "";
-      const rows = ["overall", "ai", "wifi", "lan", "broadband", "overseas_direct", "proxy"];
+      const rows = ["overall", "wifi", "lan", "broadband", "overseas_direct", "proxy"];
       for (const key of rows) {
         const row = document.createElement("div");
         row.className = "heatmap-row";
         const sub = t(`timelineRowSub_${key}`);
-        row.innerHTML = `<span class="label">${t(`timelineRow_${key}`)}${sub ? `<span class="en">${sub}</span>` : ""}</span><div class="cells"></div>`;
+        // Always render the .en sub-label span (with &nbsp; when empty) so every row
+        // is two lines tall — keeps Wi-Fi (no sub) the same height as the others.
+        row.innerHTML = `<span class="label">${t(`timelineRow_${key}`)}<span class="en">${sub || "&nbsp;"}</span></span><div class="cells"></div>`;
         const cells = row.querySelector(".cells");
         const arr = key === "overall" ? series.verdict : series.layers[key];
         for (let i = 0; i < arr.length; i++) {
