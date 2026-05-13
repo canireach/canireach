@@ -102,7 +102,10 @@
     .heatmap-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
     .heatmap-row .label { width: 110px; flex: none; font-size: 12px; color: var(--fg-soft); }
     .heatmap-row .label .en { display: block; color: var(--muted); opacity: 0.7; font-size: 10px; }
-    .heatmap-row .cells { display: grid; grid-auto-flow: column; grid-auto-columns: 6px; gap: 1px; flex: 1; }
+    /* Cells stretch to fill the available row width — when the sample count grows,
+       each cell gets thinner instead of overflowing the panel.  `min-width: 0` lets
+       the flex container shrink below its intrinsic content width. */
+    .heatmap-row .cells { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 1px; flex: 1; min-width: 0; overflow: hidden; }
     .cells .cell { height: 18px; border-radius: 2px; }
     .cell.ok        { background: var(--ok); }
     .cell.warn      { background: var(--warn); }
