@@ -11,15 +11,15 @@
     "reachability",
     "proxy"
   ],
-  "author": "canireach-lab",
+  "author": "canireach",
   "license": "MIT",
-  "homepage": "https://github.com/canireach-lab/canireach",
+  "homepage": "https://github.com/canireach/canireach",
   "repository": {
     "type": "git",
-    "url": "https://github.com/canireach-lab/canireach.git"
+    "url": "https://github.com/canireach/canireach.git"
   },
   "bugs": {
-    "url": "https://github.com/canireach-lab/canireach/issues"
+    "url": "https://github.com/canireach/canireach/issues"
   },
   "type": "module",
   "private": true,
