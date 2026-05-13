@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <title>canireach · 网络状态</title>
+  <title>canireach</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root {
@@ -27,14 +27,19 @@
 
     /* ---------------- header ---------------- */
     header { padding: 14px 24px; border-bottom: 1px solid var(--border);
-      display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
     header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.3px; color: var(--fg-soft); }
     header .meta { font-size: 12px; color: var(--muted); }
     header .meta b { color: var(--fg-soft); font-weight: 500; }
+    header .spacer { flex: 1; }
+    .lang-toggle { background: transparent; border: 1px solid var(--border); color: var(--fg-soft);
+      padding: 4px 12px; border-radius: 999px; font-size: 11px; cursor: pointer; font-family: inherit;
+      letter-spacing: 0.05em; }
+    .lang-toggle:hover { color: var(--fg); border-color: var(--muted); }
 
     main { max-width: 1280px; margin: 0 auto; padding: 20px 24px 60px; display: flex; flex-direction: column; gap: 20px; }
 
-    /* ---------------- top banners: two side-by-side compact strips ---------------- */
+    /* ---------------- top banners ---------------- */
     .banners { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .banner { padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border);
       background: var(--panel); display: flex; align-items: center; gap: 12px; }
@@ -56,7 +61,7 @@
     .banner .text .sub { margin-top: 3px; font-size: 12px; color: var(--fg-soft);
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-    /* ---------------- layer cards: 6 across, compact ---------------- */
+    /* ---------------- layer cards ---------------- */
     .layers { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
     .layer-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
       padding: 10px 12px; position: relative; transition: border-color 0.2s; }
@@ -87,7 +92,7 @@
     .dot.unknown { background: var(--muted); opacity: 0.5; }
 
     /* ---------------- section labels ---------------- */
-    .section-title { display: flex; align-items: baseline; gap: 10px; }
+    .section-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
     .section-title h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--fg-soft); }
     .section-title .hint { font-size: 12px; color: var(--muted); }
 
@@ -147,35 +152,37 @@
 <body>
   <header>
     <h1>canireach</h1>
-    <span class="meta">本机网络状态监测 · <b id="updated">loading…</b> · <span id="cycle"></span></span>
+    <span class="meta" data-i18n-static="metaPrefix"></span><span class="meta"> · <b id="updated">…</b> · <span class="meta" id="cycle"></span></span>
+    <span class="spacer"></span>
+    <button class="lang-toggle" id="lang-toggle" aria-label="toggle language">EN</button>
   </header>
 
   <main>
-    <!-- 1) two side-by-side verdict banners: general internet & AI services -->
+    <!-- 1) two side-by-side verdict banners -->
     <section class="banners">
       <div class="banner unknown" id="banner-net">
         <div class="icon" id="banner-net-icon">·</div>
         <div class="text">
           <div class="heading">
-            <span class="label">网络</span>
-            <span class="title" id="banner-net-title">加载中…</span>
+            <span class="label" data-i18n-static="bannerNetLabel"></span>
+            <span class="title" id="banner-net-title">…</span>
           </div>
-          <div class="sub" id="banner-net-sub">等待第一个采样</div>
+          <div class="sub" id="banner-net-sub"></div>
         </div>
       </div>
       <div class="banner unknown" id="banner-ai">
         <div class="icon" id="banner-ai-icon">·</div>
         <div class="text">
           <div class="heading">
-            <span class="label">AI 服务</span>
-            <span class="title" id="banner-ai-title">加载中…</span>
+            <span class="label" data-i18n-static="bannerAiLabel"></span>
+            <span class="title" id="banner-ai-title">…</span>
           </div>
-          <div class="sub" id="banner-ai-sub">Anthropic + OpenAI API 可达性</div>
+          <div class="sub" id="banner-ai-sub"></div>
         </div>
       </div>
     </section>
 
-    <!-- 2) six-layer compact cards -->
+    <!-- 2) six layer cards -->
     <section>
       <div class="layers" id="layer-cards"></div>
     </section>
@@ -183,271 +190,519 @@
     <!-- 3) verdict timeline -->
     <section>
       <div class="section-title">
-        <h2>历史时间线</h2>
-        <span class="hint">每一小格 = 一次采样（约每分钟一次）。最左边最早，最右边是刚才。</span>
+        <h2 data-i18n-static="timelineTitle"></h2>
+        <span class="hint" data-i18n-static="timelineHint"></span>
       </div>
-      <div class="timeline" style="margin-top: 10px" id="timeline-panel">
+      <div class="timeline" style="margin-top: 10px">
         <div id="heatmap"></div>
-        <div class="legend">
-          <span><span class="swatch" style="background:var(--ok)"></span>正常</span>
-          <span><span class="swatch" style="background:var(--gfw)"></span>仅 GFW 屏蔽（代理可用，正常）</span>
-          <span><span class="swatch" style="background:var(--warn)"></span>有些慢</span>
-          <span><span class="swatch" style="background:var(--bad)"></span>故障</span>
-          <span><span class="swatch" style="background:var(--skipped);opacity:0.6"></span>跳过（更底层挂了）</span>
-          <span><span class="swatch" style="background:var(--muted);opacity:0.25"></span>无数据</span>
-        </div>
+        <div class="legend" id="legend"></div>
       </div>
     </section>
 
     <!-- 4) trends with tabs -->
     <section>
       <div class="section-title">
-        <h2>趋势详情</h2>
-        <span class="hint">需要排查具体问题时再展开看，平时不用关注。</span>
+        <h2 data-i18n-static="trendsTitle"></h2>
+        <span class="hint" data-i18n-static="trendsHint"></span>
       </div>
       <div class="trends" style="margin-top: 10px">
         <div class="tabs" id="tabs">
-          <button data-tab="ping" class="active">延迟（ping）</button>
-          <button data-tab="https">网页打开时间</button>
-          <button data-tab="ai">AI API</button>
-          <button data-tab="wifi">Wi-Fi 信号</button>
-          <button data-tab="proxy">代理</button>
-          <button data-tab="dns">DNS</button>
+          <button data-tab="ping" class="active" data-i18n-static="tabPing"></button>
+          <button data-tab="https" data-i18n-static="tabHttps"></button>
+          <button data-tab="ai" data-i18n-static="tabAi"></button>
+          <button data-tab="wifi" data-i18n-static="tabWifi"></button>
+          <button data-tab="proxy" data-i18n-static="tabProxy"></button>
+          <button data-tab="dns" data-i18n-static="tabDns"></button>
         </div>
         <div class="tab-body">
-          <!-- ping -->
           <div data-tab-pane="ping">
-            <p class="help">越低越好。<b>网关</b>是你的路由器，正常 1-10ms；<b>223.5.5.5</b> 是国内公共 DNS；<b>1.1.1.1 / 8.8.8.8</b> 是国外公共 DNS（可能丢包，是 GFW 干扰的常见信号）。</p>
+            <p class="help" data-i18n-html="helpPing"></p>
             <div class="chart-wrap"><canvas id="chart-ping"></canvas></div>
           </div>
-          <!-- https -->
           <div data-tab-pane="https" hidden>
-            <p class="help">实际打开网页用了多久（毫秒）。<b>direct</b> 是不走代理直连，<b>proxy</b> 是经过代理。<b>失败 / 超时的样本在折线图上显示为断点（gap）</b>，详细成功率看下方表格。</p>
+            <p class="help" data-i18n-html="helpHttps"></p>
             <div class="chart-wrap"><canvas id="chart-https"></canvas></div>
             <table style="margin-top: 14px">
-              <thead><tr><th>目标</th><th>方式</th><th>近期成功率</th><th>平均耗时（成功样本）</th></tr></thead>
+              <thead><tr>
+                <th data-i18n-static="thTarget"></th>
+                <th data-i18n-static="thVia"></th>
+                <th data-i18n-static="thRate"></th>
+                <th data-i18n-static="thAvgMs"></th>
+              </tr></thead>
               <tbody id="https-table"></tbody>
             </table>
           </div>
-          <!-- ai -->
           <div data-tab-pane="ai" hidden>
-            <p class="help"><b>Anthropic & OpenAI API 端点可达性。</b>这是「能不能用 Claude / GPT」的最终指标。API 端点对未授权请求会返回 4xx（404/401/421 等），<b>只要返回了任何 HTTP 状态码就算可达</b>。直连在大陆通常会被 Cloudflare 屏蔽或超时，代理是主要通路。</p>
+            <p class="help" data-i18n-html="helpAi"></p>
             <table style="margin-bottom: 14px">
-              <thead><tr><th>端点</th><th>方式</th><th>近期成功率</th><th>平均响应（成功）</th></tr></thead>
+              <thead><tr>
+                <th data-i18n-static="thEndpoint"></th>
+                <th data-i18n-static="thVia"></th>
+                <th data-i18n-static="thRate"></th>
+                <th data-i18n-static="thAvgMsOk"></th>
+              </tr></thead>
               <tbody id="ai-table"></tbody>
             </table>
             <div class="chart-wrap"><canvas id="chart-ai"></canvas></div>
           </div>
-          <!-- wifi -->
           <div data-tab-pane="wifi" hidden>
-            <p class="help">信号强度（dBm，越接近 0 越好；-50 强，-70 一般，-80 以下就不稳了）。发射速率反映 Wi-Fi 协商出来的连接速度。</p>
+            <p class="help" data-i18n-html="helpWifi"></p>
             <div class="chart-wrap"><canvas id="chart-wifi"></canvas></div>
           </div>
-          <!-- proxy split into two charts -->
           <div data-tab-pane="proxy" hidden>
-            <p class="help">两张图分别看代理的<b>响应快慢</b>和<b>实际带宽</b>（不同单位，单独看）。下面列出近期出现过的代理出口 IP。</p>
+            <p class="help" data-i18n-html="helpProxy"></p>
             <div class="chart-grid-2">
               <div>
-                <div class="help" style="margin-bottom:4px;font-weight:500;color:var(--fg-soft)">代理响应时间（毫秒）</div>
+                <div class="help" style="margin-bottom:4px;font-weight:500;color:var(--fg-soft)" data-i18n-static="proxyMsTitle"></div>
                 <div class="chart-wrap" style="height: 220px"><canvas id="chart-proxy-ms"></canvas></div>
               </div>
               <div>
-                <div class="help" style="margin-bottom:4px;font-weight:500;color:var(--fg-soft)">代理下行带宽（Mbps · 每 10 次采样一次）</div>
+                <div class="help" style="margin-bottom:4px;font-weight:500;color:var(--fg-soft)" data-i18n-static="proxyMbpsTitle"></div>
                 <div class="chart-wrap" style="height: 220px"><canvas id="chart-proxy-mbps"></canvas></div>
               </div>
             </div>
             <div id="egress-list" class="help" style="margin-top: 12px"></div>
           </div>
-          <!-- dns -->
           <div data-tab-pane="dns" hidden>
-            <p class="help">不同 DNS 服务器的查询时间。如果国内 DNS（223.5.5.5 / 119.29.29.29）也变慢，多半是局域网/上游问题；如果只有海外 DNS（8.8.8.8 / 1.1.1.1）变慢或丢失，多半是 GFW 干扰。</p>
+            <p class="help" data-i18n-html="helpDns"></p>
             <div class="chart-wrap"><canvas id="chart-dns"></canvas></div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- 5) conclusions (collapsed) -->
     <details>
-      <summary>本轮结论摘要（由 20 分钟一次的回顾流程更新）</summary>
-      <div class="body"><pre id="conclusions">loading…</pre></div>
+      <summary data-i18n-static="conclusionsTitle"></summary>
+      <div class="body"><pre id="conclusions">…</pre></div>
     </details>
-
-    <!-- 6) raw -->
     <details>
-      <summary>最近一次原始采样（JSON）</summary>
-      <div class="body"><pre id="latest-raw">loading…</pre></div>
+      <summary data-i18n-static="rawTitle"></summary>
+      <div class="body"><pre id="latest-raw">…</pre></div>
     </details>
   </main>
 
   <script src="/chart.js"></script>
   <script>
+    /* =================================================================
+       I18N
+       =================================================================
+       Two-language string table. Keys are referenced from:
+         - data-i18n-static="key"  → element.textContent = T[key]
+         - data-i18n-html="key"    → element.innerHTML = T[key]  (when markup needed)
+         - t("key", params)        → from JS code, with {placeholder} substitution
+       Lang toggles between "zh" and "en", persisted in localStorage("canireach.lang"),
+       defaults to navigator.language. No reload needed — full re-render on toggle.
+    */
+    const I18N = {
+      zh: {
+        // header
+        metaPrefix: "本机网络与 AI 服务可达性监测",
+        cycleLabel: "第 {n} 次采样 · 间隔 {sec}s",
+        noDataYet: "等待 daemon 完成第一次采样",
+        toggleLabel: "EN",
+        // banner labels
+        bannerNetLabel: "网络",
+        bannerAiLabel: "AI 服务",
+        bannerLoadingTitle: "加载中…",
+        bannerLoadingSub: "等待第一个采样",
+        bannerAiInitialSub: "Anthropic + OpenAI API 可达性",
+        // network verdict titles
+        netTitle_healthy: "正常",
+        netTitle_gfw_only_proxy_ok: "正常（GFW 屏蔽，代理工作中）",
+        netTitle_degraded: "略慢",
+        netTitle_proxy_bad: "代理异常",
+        netTitle_broadband_bad: "上游宽带异常",
+        netTitle_wifi_bad: "Wi-Fi 异常",
+        netTitle_lan_bad: "局域网异常",
+        netTitle_unknown: "未知",
+        // network verdict subs
+        netSub_healthy: "所有检查通过 · 代理通畅 · 国内国际访问均可用",
+        netSub_gfw_only_proxy_ok: "国内畅通，国外直连按预期受限，代理可用 — 大陆机器常态",
+        netSub_degraded: "部分检查偏慢或偶发失败",
+        netSub_proxy_bad: "国内正常但代理或上游不工作",
+        netSub_broadband_bad: "路由器能通，国内公网挂了",
+        netSub_wifi_bad: "信号过弱或未连上",
+        netSub_lan_bad: "Wi-Fi 连上但路由器不响应",
+        netSub_unknown: "等待采样",
+        // AI verdict titles
+        aiTitle_ok: "正常",
+        aiTitle_proxy_only: "正常（代理路径）",
+        aiTitle_degraded: "部分可用",
+        aiTitle_direct_only: "代理异常",
+        aiTitle_fail: "不可达",
+        aiTitle_skipped: "无法判断",
+        aiTitle_unknown: "未知",
+        // AI verdict subs (some take params)
+        aiSub_ok: "Anthropic & OpenAI 均可达（代理稳定，部分直连也通：{n}/2）",
+        aiSub_proxy_only: "Anthropic & OpenAI 通过代理可达，直连均被屏蔽",
+        aiSub_degraded: "仅 {ok} 代理可达；{fail} 代理失败",
+        aiSub_direct_only: "代理路径失败，但仍有部分直连可达 — 代理 App 异常",
+        aiSub_fail: "Anthropic 与 OpenAI 均不可达（代理 & 直连都失败）",
+        aiSub_skipped: "代理挂了且直连也不通，无法判断",
+        aiSub_unknown: "等待采样",
+        // status words
+        sw_ok: "正常", sw_warn: "略慢", sw_bad: "异常", sw_skipped: "跳过", sw_gfw: "GFW 屏蔽", sw_unknown: "—",
+        // layer names (main + sub)
+        layerName_wifi: "Wi-Fi",            layerSub_wifi: "wireless",
+        layerName_lan: "局域网",            layerSub_lan: "router",
+        layerName_broadband: "国内",        layerSub_broadband: "domestic",
+        layerName_overseas_direct: "国际直连", layerSub_overseas_direct: "direct",
+        layerName_proxy: "代理",            layerSub_proxy: "proxy",
+        layerName_ai: "AI 服务",            layerSub_ai: "claude · gpt",
+        // metric snippets
+        metric_baidu: "百度",
+        metric_fail: "失败",
+        metric_loss: "丢包",
+        metric_reachable: "{n}/{total} 可达",
+        metric_egress: "出口",
+        metric_listening: "已监听",
+        metric_notListening: "未监听",
+        // timeline
+        timelineTitle: "历史时间线",
+        timelineHint: "每一小格 = 一次采样（约每分钟一次）。最左边最早，最右边是刚才。",
+        timelineRow_overall: "网络总体", timelineRowSub_overall: "network",
+        timelineRow_ai: "AI 服务",       timelineRowSub_ai: "claude/gpt",
+        timelineRow_wifi: "Wi-Fi",       timelineRowSub_wifi: "",
+        timelineRow_lan: "局域网",       timelineRowSub_lan: "router",
+        timelineRow_broadband: "国内",   timelineRowSub_broadband: "domestic",
+        timelineRow_overseas_direct: "国际直连", timelineRowSub_overseas_direct: "direct",
+        timelineRow_proxy: "代理",       timelineRowSub_proxy: "proxy",
+        // legend
+        legend_ok: "正常",
+        legend_gfw: "仅 GFW 屏蔽（代理可用，正常）",
+        legend_warn: "有些慢",
+        legend_bad: "故障",
+        legend_skipped: "跳过（更底层挂了）",
+        legend_unknown: "无数据",
+        // trends section
+        trendsTitle: "趋势详情",
+        trendsHint: "需要排查具体问题时再展开看，平时不用关注。",
+        // tabs
+        tabPing: "延迟（ping）",
+        tabHttps: "网页打开时间",
+        tabAi: "AI API",
+        tabWifi: "Wi-Fi 信号",
+        tabProxy: "代理",
+        tabDns: "DNS",
+        // tab help text (HTML)
+        helpPing: '越低越好。<b>网关</b>是你的路由器，正常 1-10ms；<b>223.5.5.5</b> 是国内公共 DNS；<b>1.1.1.1 / 8.8.8.8</b> 是国外公共 DNS（可能丢包，是 GFW 干扰的常见信号）。',
+        helpHttps: '实际打开网页用了多久（毫秒）。<b>direct</b> 是不走代理直连，<b>proxy</b> 是经过代理。<b>失败 / 超时的样本在折线图上显示为断点（gap）</b>，详细成功率看下方表格。',
+        helpAi: '<b>Anthropic & OpenAI API 端点可达性。</b>这是「能不能用 Claude / GPT」的最终指标。API 端点对未授权请求会返回 4xx（404/401/421 等），<b>只要返回了任何 HTTP 状态码就算可达</b>。直连在大陆通常会被 Cloudflare 屏蔽或超时，代理是主要通路。',
+        helpWifi: '信号强度（dBm，越接近 0 越好；-50 强，-70 一般，-80 以下就不稳了）。发射速率反映 Wi-Fi 协商出来的连接速度。',
+        helpProxy: '两张图分别看代理的<b>响应快慢</b>和<b>实际带宽</b>（不同单位，单独看）。下面列出近期出现过的代理出口 IP。',
+        helpDns: '不同 DNS 服务器的查询时间。如果国内 DNS（223.5.5.5 / 119.29.29.29）也变慢，多半是局域网/上游问题；如果只有海外 DNS（8.8.8.8 / 1.1.1.1）变慢或丢失，多半是 GFW 干扰。',
+        // table headers
+        thTarget: "目标", thEndpoint: "端点", thVia: "方式", thRate: "近期成功率",
+        thAvgMs: "平均耗时（成功样本）", thAvgMsOk: "平均响应（成功）",
+        // chart labels
+        chart_gateway: "网关",
+        chart_aliDns: "223.5.5.5 (国内)",
+        chart_rssi: "RSSI (dBm)",
+        chart_txRate: "发射速率 (Mbps)",
+        chart_egressMs: "egress 获取耗时",
+        chart_downloadMbps: "下行 Mbps",
+        // proxy detail
+        proxyMsTitle: "代理响应时间（毫秒）",
+        proxyMbpsTitle: "代理下行带宽（Mbps · 每 10 次采样一次）",
+        egressListPrefix: "近期出现的代理出口 IP：",
+        egressListNone: "（暂无）",
+        // collapsibles
+        conclusionsTitle: "本轮结论摘要（由 20 分钟一次的回顾流程更新）",
+        rawTitle: "最近一次原始采样（JSON）",
+        conclusionsEmpty: "（暂无）",
+      },
+      en: {
+        metaPrefix: "Local network + AI-service reachability monitor",
+        cycleLabel: "sample #{n} · every {sec}s",
+        noDataYet: "waiting for the daemon's first cycle",
+        toggleLabel: "中",
+        bannerNetLabel: "NETWORK",
+        bannerAiLabel: "AI SERVICES",
+        bannerLoadingTitle: "loading…",
+        bannerLoadingSub: "waiting for first sample",
+        bannerAiInitialSub: "Anthropic + OpenAI API reachability",
+        netTitle_healthy: "Healthy",
+        netTitle_gfw_only_proxy_ok: "Healthy (GFW blocking, proxy working)",
+        netTitle_degraded: "Slow",
+        netTitle_proxy_bad: "Proxy down",
+        netTitle_broadband_bad: "Upstream broadband down",
+        netTitle_wifi_bad: "Wi-Fi down",
+        netTitle_lan_bad: "LAN down",
+        netTitle_unknown: "Unknown",
+        netSub_healthy: "All checks pass · proxy OK · domestic & overseas reachable",
+        netSub_gfw_only_proxy_ok: "Domestic OK, overseas direct limited (expected), proxy works — normal for a CN machine",
+        netSub_degraded: "Some checks slow or intermittent",
+        netSub_proxy_bad: "Domestic OK but proxy or upstream not working",
+        netSub_broadband_bad: "Router reachable but domestic Internet is down",
+        netSub_wifi_bad: "Signal too weak or not connected",
+        netSub_lan_bad: "Wi-Fi connected but router not responding",
+        netSub_unknown: "Waiting for samples",
+        aiTitle_ok: "Reachable",
+        aiTitle_proxy_only: "Reachable (via proxy)",
+        aiTitle_degraded: "Partially reachable",
+        aiTitle_direct_only: "Proxy broken",
+        aiTitle_fail: "Unreachable",
+        aiTitle_skipped: "Cannot determine",
+        aiTitle_unknown: "Unknown",
+        aiSub_ok: "Anthropic & OpenAI both reachable (proxy stable, direct: {n}/2)",
+        aiSub_proxy_only: "Anthropic & OpenAI reachable via proxy; direct routes blocked",
+        aiSub_degraded: "Only {ok} reachable via proxy; {fail} failed",
+        aiSub_direct_only: "Proxy path failing, only some direct routes still work — proxy app issue",
+        aiSub_fail: "Both Anthropic and OpenAI unreachable (proxy & direct both failed)",
+        aiSub_skipped: "Proxy down and direct also blocked — cannot determine",
+        aiSub_unknown: "Waiting for samples",
+        sw_ok: "OK", sw_warn: "slow", sw_bad: "down", sw_skipped: "skipped", sw_gfw: "GFW blocked", sw_unknown: "—",
+        layerName_wifi: "Wi-Fi",             layerSub_wifi: "",
+        layerName_lan: "Router",             layerSub_lan: "LAN",
+        layerName_broadband: "Domestic",     layerSub_broadband: "CN sites",
+        layerName_overseas_direct: "Direct", layerSub_overseas_direct: "overseas",
+        layerName_proxy: "Proxy",            layerSub_proxy: "",
+        layerName_ai: "AI",                  layerSub_ai: "claude · gpt",
+        metric_baidu: "Baidu",
+        metric_fail: "fail",
+        metric_loss: "loss",
+        metric_reachable: "{n}/{total} up",
+        metric_egress: "out",
+        metric_listening: "listening",
+        metric_notListening: "not listening",
+        timelineTitle: "Timeline",
+        timelineHint: "Each cell = one sample (~1 per minute). Oldest left, most recent right.",
+        timelineRow_overall: "Network",  timelineRowSub_overall: "overall",
+        timelineRow_ai: "AI",            timelineRowSub_ai: "claude/gpt",
+        timelineRow_wifi: "Wi-Fi",       timelineRowSub_wifi: "",
+        timelineRow_lan: "Router",       timelineRowSub_lan: "LAN",
+        timelineRow_broadband: "Domestic", timelineRowSub_broadband: "CN",
+        timelineRow_overseas_direct: "Direct", timelineRowSub_overseas_direct: "overseas",
+        timelineRow_proxy: "Proxy",      timelineRowSub_proxy: "",
+        legend_ok: "OK",
+        legend_gfw: "GFW-only block (proxy OK, expected)",
+        legend_warn: "slow",
+        legend_bad: "fail",
+        legend_skipped: "skipped (lower layer failed)",
+        legend_unknown: "no data",
+        trendsTitle: "Trends",
+        trendsHint: "Expand when you need to drill in — usually not needed.",
+        tabPing: "Ping",
+        tabHttps: "HTTPS",
+        tabAi: "AI API",
+        tabWifi: "Wi-Fi",
+        tabProxy: "Proxy",
+        tabDns: "DNS",
+        helpPing: 'Lower is better. <b>Gateway</b> is your router, normally 1-10ms; <b>223.5.5.5</b> is a CN public DNS; <b>1.1.1.1 / 8.8.8.8</b> are overseas DNS (loss here is a common GFW interference signal).',
+        helpHttps: 'Total time to fetch the page (ms). <b>direct</b> bypasses the proxy; <b>proxy</b> goes through it. <b>Failed / timed-out samples are rendered as gaps</b>; see the table below for the actual success rate.',
+        helpAi: '<b>Anthropic & OpenAI API reachability.</b> The bottom-line "can I use Claude / GPT?" indicator. These endpoints return 4xx (404/401/421) without auth — <b>any HTTP response counts as reachable</b>. Direct routes are usually blocked by Cloudflare or time out from CN; the proxy is the main path.',
+        helpWifi: 'Signal strength (dBm — closer to zero is better; -50 great, -70 ok, below -80 unreliable). Tx rate is the negotiated Wi-Fi link speed.',
+        helpProxy: 'Two charts: proxy <b>response latency</b> and actual <b>throughput</b> (different units, kept separate). The list below shows distinct egress IPs seen recently.',
+        helpDns: 'Query time per resolver. If CN DNS (223.5.5.5 / 119.29.29.29) also slows down, it is LAN / upstream; if only overseas DNS (8.8.8.8 / 1.1.1.1) slow or lossy, it is GFW interference.',
+        thTarget: "target", thEndpoint: "endpoint", thVia: "via", thRate: "recent success",
+        thAvgMs: "avg ms (successful)", thAvgMsOk: "avg ms (successful)",
+        chart_gateway: "gateway",
+        chart_aliDns: "223.5.5.5 (CN)",
+        chart_rssi: "RSSI (dBm)",
+        chart_txRate: "tx rate (Mbps)",
+        chart_egressMs: "egress fetch ms",
+        chart_downloadMbps: "down Mbps",
+        proxyMsTitle: "Proxy response latency (ms)",
+        proxyMbpsTitle: "Proxy download throughput (Mbps · sampled every 10 cycles)",
+        egressListPrefix: "Distinct proxy egress IPs seen: ",
+        egressListNone: "(none yet)",
+        conclusionsTitle: "Latest conclusions (refreshed by the 20-min review loop)",
+        rawTitle: "Latest raw sample (JSON)",
+        conclusionsEmpty: "(none yet)",
+      },
+    };
+
+    let lang = (() => {
+      const saved = localStorage.getItem("canireach.lang");
+      if (saved === "zh" || saved === "en") return saved;
+      return (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+    })();
+
+    function t(key, params) {
+      let s = I18N[lang][key];
+      if (s === undefined) s = I18N.en[key] ?? key;
+      if (params) for (const [k, v] of Object.entries(params)) s = s.replaceAll(`{${k}}`, String(v));
+      return s;
+    }
+
+    function applyStaticI18n() {
+      document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+      for (const el of document.querySelectorAll("[data-i18n-static]")) {
+        el.textContent = t(el.dataset.i18nStatic);
+      }
+      for (const el of document.querySelectorAll("[data-i18n-html]")) {
+        el.innerHTML = t(el.dataset.i18nHtml);
+      }
+      document.getElementById("lang-toggle").textContent = t("toggleLabel");
+    }
+
     // -------------------- helpers --------------------
     const $ = (s) => document.querySelector(s);
-    const fmtTime = (iso) => { try { return new Date(iso).toLocaleTimeString("zh-CN", { hour12: false }); } catch { return iso; } };
+    const fmtTime = (iso) => { try { return new Date(iso).toLocaleTimeString(lang === "zh" ? "zh-CN" : "en-GB", { hour12: false }); } catch { return iso; } };
     async function fetchJson(p) { const r = await fetch(p); return r.ok ? r.json() : null; }
     async function fetchText(p) { const r = await fetch(p); return r.ok ? r.text() : null; }
 
-    // Map a probe layer state → our 4-color bucket
     const stateBucket = (st) => st === "ok" ? "ok" : st === "degraded" ? "warn" : st === "fail" ? "bad" : st === "skipped" ? "skipped" : "unknown";
-    // Map overall verdict → top banner mood
-    const verdictBucket = (v) => {
-      if (v === "healthy") return { mood: "ok", icon: "✓", title: "正常", sub: "所有检查通过 · 代理通畅 · 国内国际访问均可用" };
-      if (v === "gfw_only_proxy_ok") return { mood: "gfw", icon: "◇", title: "正常（GFW 屏蔽，代理工作中）", sub: "国内畅通，国外直连按预期受限，代理可用 — 大陆机器常态" };
-      if (v === "degraded") return { mood: "warn", icon: "!", title: "略慢", sub: "部分检查偏慢或偶发失败" };
-      if (v === "proxy_bad") return { mood: "bad", icon: "✕", title: "代理异常", sub: "国内正常但代理或上游不工作" };
-      if (v === "broadband_bad") return { mood: "bad", icon: "✕", title: "上游宽带异常", sub: "路由器能通，国内公网挂了" };
-      if (v === "wifi_bad") return { mood: "bad", icon: "✕", title: "Wi-Fi 异常", sub: "信号过弱或未连上" };
-      if (v === "lan_bad") return { mood: "bad", icon: "✕", title: "局域网异常", sub: "Wi-Fi 连上但路由器不响应" };
-      return { mood: "unknown", icon: "·", title: "未知", sub: "等待采样" };
-    };
-    // Map AI state → banner
-    const aiBucket = (state, headline) => {
-      if (state === "ok")          return { mood: "ok",  icon: "✓", title: "正常", sub: headline };
-      if (state === "proxy_only")  return { mood: "ok",  icon: "✓", title: "正常（代理路径）", sub: headline };
-      if (state === "degraded")    return { mood: "warn", icon: "!", title: "部分可用", sub: headline };
-      if (state === "direct_only") return { mood: "warn", icon: "!", title: "代理异常", sub: headline };
-      if (state === "fail")        return { mood: "bad", icon: "✕", title: "不可达", sub: headline };
-      if (state === "skipped")     return { mood: "unknown", icon: "·", title: "无法判断", sub: headline };
-      return { mood: "unknown", icon: "·", title: "未知", sub: "等待采样" };
-    };
 
-    // Six layer-card definitions: status word, one-line metric. Compact.
-    const STATUS_WORD = { ok: "正常", warn: "略慢", bad: "异常", skipped: "跳过", gfw: "GFW 屏蔽", unknown: "—" };
-    const LAYER_DEF = [
-      {
-        key: "wifi", zh: "Wi-Fi", en: "wireless",
-        metric: (s) => s.wifi
-          ? `<span class="mono">${s.wifi.rssi ?? "?"}dBm</span> · ${s.wifi.txRate ?? "?"}Mbps`
-          : "—",
-      },
-      {
-        key: "lan", zh: "局域网", en: "router",
-        metric: (s) => {
-          const gw = s.iface?.gateway, p = s.pings?.find((x) => x.target === gw);
-          return gw ? `<span class="mono">${gw.split(".").slice(-2).join(".")}</span> · ${p?.ok ? Math.round(p.avgMs) + " ms" : "丢包"}` : "—";
-        },
-      },
-      {
-        key: "broadband", zh: "国内", en: "domestic",
-        metric: (s) => {
-          const b = s.https?.find((h) => h.label === "baidu_direct");
-          return b ? `百度 <span class="mono">${b.ok ? Math.round(b.totalMs) + " ms" : "失败"}</span>` : "—";
-        },
-      },
-      {
-        key: "overseas_direct", zh: "国际直连", en: "direct",
-        metric: (s) => {
-          const direct = (s.https ?? []).filter((h) => h.via === "direct" && !["baidu_direct","taobao_direct","anthropic_direct","openai_direct"].includes(h.label));
-          const ok = direct.filter((h) => h.ok).length;
-          return `${ok}/${direct.length} 可达`;
-        },
-      },
-      {
-        key: "proxy", zh: "代理", en: "proxy",
-        metric: (s) => {
-          const eg = s.proxyEgress?.ip;
-          return eg ? `出口 <span class="mono">${eg}</span>` : (s.proxyConfig?.listening ? "已监听" : "未监听");
-        },
-      },
-      {
-        key: "ai", zh: "AI 服务", en: "claude · gpt",
-        metric: (s) => {
-          const aP = s.https?.find((h) => h.label === "anthropic_proxy")?.ok;
-          const oP = s.https?.find((h) => h.label === "openai_proxy")?.ok;
-          return `代理: A=${aP ? "✓" : "✕"} O=${oP ? "✓" : "✕"}`;
-        },
-      },
-    ];
+    // -------------------- banner content --------------------
+    function netBanner(overall) {
+      const icon = { healthy: "✓", gfw_only_proxy_ok: "◇", degraded: "!", proxy_bad: "✕",
+                     broadband_bad: "✕", wifi_bad: "✕", lan_bad: "✕", unknown: "·" }[overall] ?? "·";
+      const mood = overall === "healthy" ? "ok"
+                 : overall === "gfw_only_proxy_ok" ? "gfw"
+                 : overall === "degraded" ? "warn"
+                 : overall === "unknown" ? "unknown"
+                 : "bad";
+      return { mood, icon, title: t(`netTitle_${overall}`), sub: t(`netSub_${overall}`) };
+    }
 
-    function bucketForOverseas(s, layerSt) {
-      // Promote "fail" for overseas direct to GFW-purple if proxy is OK — it's not really a failure
-      if (layerSt === "fail" && s.verdict?.layers?.find((l) => l.layer === "proxy")?.state === "ok") return "gfw";
-      return stateBucket(layerSt);
+    function aiBannerFromState(aiV, latest) {
+      const state = aiV.state ?? "unknown";
+      const icon = { ok: "✓", proxy_only: "✓", degraded: "!", direct_only: "!",
+                     fail: "✕", skipped: "·", unknown: "·" }[state] ?? "·";
+      const mood = (state === "ok" || state === "proxy_only") ? "ok"
+                 : (state === "degraded" || state === "direct_only") ? "warn"
+                 : state === "fail" ? "bad"
+                 : "unknown";
+      let sub;
+      if (state === "ok") {
+        const directHits = ["anthropic_direct","openai_direct"]
+          .filter((l) => latest.https?.find((h) => h.label === l)?.ok).length;
+        sub = t("aiSub_ok", { n: directHits });
+      } else if (state === "degraded") {
+        const aP = latest.https?.find((h) => h.label === "anthropic_proxy")?.ok;
+        const ok = aP ? "Anthropic" : "OpenAI";
+        const fail = aP ? "OpenAI" : "Anthropic";
+        sub = t("aiSub_degraded", { ok, fail });
+      } else {
+        sub = t(`aiSub_${state}`);
+      }
+      return { mood, icon, title: t(`aiTitle_${state}`), sub };
     }
 
     function renderBanners(latest) {
-      // network banner (overall, excludes AI)
-      const v = verdictBucket(latest.verdict.overall);
-      const bN = $("#banner-net");
-      bN.className = "banner " + v.mood;
+      const v = netBanner(latest.verdict.overall);
+      $("#banner-net").className = "banner " + v.mood;
       $("#banner-net-icon").textContent = v.icon;
       $("#banner-net-title").textContent = v.title;
-      $("#banner-net-sub").textContent = latest.verdict.headline && latest.verdict.overall !== "healthy"
-        ? `${v.sub} · ${latest.verdict.headline}` : v.sub;
-      $("#banner-net-sub").title = $("#banner-net-sub").textContent;  // tooltip for truncated text
+      $("#banner-net-sub").textContent = v.sub;
+      $("#banner-net-sub").title = v.sub;
 
-      // AI banner
-      const aiV = latest.verdict.ai ?? { state: "unknown", headline: "" };
-      const a = aiBucket(aiV.state, aiV.headline);
-      const bA = $("#banner-ai");
-      bA.className = "banner " + a.mood;
+      const a = aiBannerFromState(latest.verdict.ai ?? { state: "unknown" }, latest);
+      $("#banner-ai").className = "banner " + a.mood;
       $("#banner-ai-icon").textContent = a.icon;
       $("#banner-ai-title").textContent = a.title;
       $("#banner-ai-sub").textContent = a.sub;
       $("#banner-ai-sub").title = a.sub;
     }
 
+    // -------------------- layer cards --------------------
+    const LAYER_KEYS = ["wifi", "lan", "broadband", "overseas_direct", "proxy", "ai"];
+    function layerMetric(key, s) {
+      switch (key) {
+        case "wifi":
+          return s.wifi ? `<span class="mono">${s.wifi.rssi ?? "?"}dBm</span> · ${s.wifi.txRate ?? "?"}Mbps` : "—";
+        case "lan": {
+          const gw = s.iface?.gateway, p = s.pings?.find((x) => x.target === gw);
+          if (!gw) return "—";
+          const short = gw.split(".").slice(-2).join(".");
+          return `<span class="mono">${short}</span> · ${p?.ok ? Math.round(p.avgMs) + " ms" : t("metric_loss")}`;
+        }
+        case "broadband": {
+          const b = s.https?.find((h) => h.label === "baidu_direct");
+          if (!b) return "—";
+          return `${t("metric_baidu")} <span class="mono">${b.ok ? Math.round(b.totalMs) + " ms" : t("metric_fail")}</span>`;
+        }
+        case "overseas_direct": {
+          const dirs = (s.https ?? []).filter((h) =>
+            h.via === "direct" && !["baidu_direct","taobao_direct","anthropic_direct","openai_direct"].includes(h.label));
+          const ok = dirs.filter((h) => h.ok).length;
+          return t("metric_reachable", { n: ok, total: dirs.length });
+        }
+        case "proxy": {
+          const eg = s.proxyEgress?.ip;
+          if (eg) return `${t("metric_egress")} <span class="mono">${eg}</span>`;
+          return s.proxyConfig?.listening ? t("metric_listening") : t("metric_notListening");
+        }
+        case "ai": {
+          const aP = s.https?.find((h) => h.label === "anthropic_proxy")?.ok;
+          const oP = s.https?.find((h) => h.label === "openai_proxy")?.ok;
+          return `proxy: A=${aP ? "✓" : "✕"} O=${oP ? "✓" : "✕"}`;
+        }
+      }
+      return "—";
+    }
+
+    function bucketForOverseas(latest, layerSt) {
+      if (layerSt === "fail" && latest.verdict?.layers?.find((l) => l.layer === "proxy")?.state === "ok") return "gfw";
+      return stateBucket(layerSt);
+    }
+
     function renderLayers(latest) {
-      const container = $("#layer-cards");
-      container.innerHTML = "";
-      for (const def of LAYER_DEF) {
-        const layer = latest.verdict.layers.find((l) => l.layer === def.key);
+      const c = $("#layer-cards");
+      c.innerHTML = "";
+      for (const key of LAYER_KEYS) {
+        const layer = latest.verdict.layers.find((l) => l.layer === key);
         const st = layer?.state ?? "unknown";
-        const bucket = def.key === "overseas_direct" ? bucketForOverseas(latest, st) : stateBucket(st);
+        const bucket = key === "overseas_direct" ? bucketForOverseas(latest, st) : stateBucket(st);
+        const sub = t(`layerSub_${key}`);
         const div = document.createElement("div");
         div.className = "layer-card " + bucket;
         div.innerHTML = `
           <div class="top-line">
             <span class="dot ${bucket}"></span>
-            <span class="layer-name">${def.zh}<span class="en">${def.en}</span></span>
+            <span class="layer-name">${t(`layerName_${key}`)}${sub ? `<span class="en">${sub}</span>` : ""}</span>
           </div>
-          <div class="status-word ${bucket}">${STATUS_WORD[bucket]}</div>
-          <div class="metric">${def.metric(latest)}</div>
+          <div class="status-word ${bucket}">${t(`sw_${bucket}`)}</div>
+          <div class="metric">${layerMetric(key, latest)}</div>
         `;
-        container.appendChild(div);
+        c.appendChild(div);
       }
     }
 
+    // -------------------- legend --------------------
+    function renderLegend() {
+      const items = [
+        ["ok", "var(--ok)"],
+        ["gfw", "var(--gfw)"],
+        ["warn", "var(--warn)"],
+        ["bad", "var(--bad)"],
+        ["skipped", "var(--skipped);opacity:0.6"],
+        ["unknown", "var(--muted);opacity:0.25"],
+      ];
+      $("#legend").innerHTML = items.map(([k, c]) =>
+        `<span><span class="swatch" style="background:${c}"></span>${t(`legend_${k}`)}</span>`).join("");
+    }
+
+    // -------------------- heatmap --------------------
     function renderHeatmap(series) {
       const root = $("#heatmap");
       root.innerHTML = "";
-      const layers = [
-        { key: "overall", zh: "网络总体", en: "network" },
-        { key: "ai", zh: "AI 服务", en: "claude/gpt" },
-        { key: "wifi", zh: "Wi-Fi", en: "" },
-        { key: "lan", zh: "局域网", en: "router" },
-        { key: "broadband", zh: "国内", en: "domestic" },
-        { key: "overseas_direct", zh: "国际直连", en: "direct" },
-        { key: "proxy", zh: "代理", en: "proxy" },
-      ];
-      for (const layer of layers) {
+      const rows = ["overall", "ai", "wifi", "lan", "broadband", "overseas_direct", "proxy"];
+      for (const key of rows) {
         const row = document.createElement("div");
         row.className = "heatmap-row";
-        row.innerHTML = `<span class="label">${layer.zh}<span class="en">${layer.en || ""}</span></span><div class="cells"></div>`;
+        const sub = t(`timelineRowSub_${key}`);
+        row.innerHTML = `<span class="label">${t(`timelineRow_${key}`)}${sub ? `<span class="en">${sub}</span>` : ""}</span><div class="cells"></div>`;
         const cells = row.querySelector(".cells");
-        const arr = layer.key === "overall" ? series.verdict : series.layers[layer.key];
-        const overallStates = series.verdict;
+        const arr = key === "overall" ? series.verdict : series.layers[key];
         for (let i = 0; i < arr.length; i++) {
           let cls;
-          if (layer.key === "overall") {
+          if (key === "overall") {
             const v = arr[i];
             cls = v === "healthy" ? "ok"
                 : v === "gfw_only_proxy_ok" ? "gfw"
                 : v === "degraded" ? "warn"
                 : v === "unknown" ? "unknown" : "bad";
-          } else if (layer.key === "overseas_direct") {
-            // soft-recolor: fail+proxyOk → gfw purple
-            const st = arr[i];
-            const proxySt = series.layers.proxy[i];
-            if (st === "fail" && proxySt === "ok") cls = "gfw";
-            else cls = stateBucket(st);
+          } else if (key === "overseas_direct") {
+            const st = arr[i], proxySt = series.layers.proxy[i];
+            cls = (st === "fail" && proxySt === "ok") ? "gfw" : stateBucket(st);
           } else {
             cls = stateBucket(arr[i]);
           }
           const cell = document.createElement("div");
           cell.className = "cell " + cls;
-          cell.title = `${fmtTime(series.t[i])}  ${layer.zh}: ${arr[i]}`;
+          cell.title = `${fmtTime(series.t[i])}  ${t(`timelineRow_${key}`)}: ${arr[i]}`;
           cells.appendChild(cell);
         }
         root.appendChild(row);
@@ -461,13 +716,15 @@
         activeTab = btn.dataset.tab;
         document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b === btn));
         document.querySelectorAll("[data-tab-pane]").forEach((p) => p.hidden = p.dataset.tabPane !== activeTab);
-        // Charts need a resize kick when un-hidden.
         for (const id of Object.keys(charts)) charts[id]?.resize();
       });
     });
 
     // -------------------- charts --------------------
     const charts = {};
+    let lastSeries = null;   // re-used on language toggle
+    let lastState = null;
+
     function makeOrUpdateLine(id, labels, datasets, opts = {}) {
       const cfg = {
         type: "line",
@@ -499,7 +756,6 @@
       label, data, borderColor: color, backgroundColor: color, tension: 0.25, spanGaps: true,
       borderWidth: 1.4, pointRadius: 0, pointHoverRadius: 4, ...opts,
     });
-    // For HTTPS: leave failures as null AND don't span gaps — visible breaks show timeouts.
     const dsLineGap = (label, data, color, opts = {}) => ({
       label, data, borderColor: color, backgroundColor: color, tension: 0,
       spanGaps: false, borderWidth: 1.3, pointRadius: 1.5, pointHoverRadius: 4, ...opts,
@@ -507,36 +763,27 @@
 
     function renderCharts(series) {
       const labels = series.t.map(fmtTime);
-      // ping
       makeOrUpdateLine("chart-ping", labels, [
-        dsLine("网关", series.pings.gw, "#6a8cff"),
-        dsLine("223.5.5.5 (国内)", series.pings.ali, "#34c47a"),
+        dsLine(t("chart_gateway"), series.pings.gw, "#6a8cff"),
+        dsLine(t("chart_aliDns"), series.pings.ali, "#34c47a"),
         dsLine("1.1.1.1", series.pings.cf, "#e6b04c"),
         dsLine("8.8.8.8", series.pings.goo, "#ef5364"),
       ]);
-      // https — non-AI labels only (AI has its own tab). Timeouts are nulls → visible gaps.
       const httpsDs = [];
       let i = 0;
-      const nonAiLabels = Object.keys(series.https).filter((k) => !k.startsWith("anthropic_") && !k.startsWith("openai_"));
-      for (const lbl of nonAiLabels) {
-        httpsDs.push(dsLineGap(lbl, series.https[lbl].totalMs, PAL[i++ % PAL.length]));
-      }
+      const nonAi = Object.keys(series.https).filter((k) => !k.startsWith("anthropic_") && !k.startsWith("openai_"));
+      for (const lbl of nonAi) httpsDs.push(dsLineGap(lbl, series.https[lbl].totalMs, PAL[i++ % PAL.length]));
       makeOrUpdateLine("chart-https", labels, httpsDs);
 
-      // AI: separate chart with the 4 AI labels
       const aiLabels = ["anthropic_direct", "anthropic_proxy", "openai_direct", "openai_proxy"];
       const aiCols = { anthropic_direct: "#b485ff", anthropic_proxy: "#34c47a", openai_direct: "#ef5364", openai_proxy: "#6a8cff" };
       const aiDs = [];
-      for (const lbl of aiLabels) {
-        if (series.https[lbl]) {
-          aiDs.push(dsLineGap(lbl, series.https[lbl].totalMs, aiCols[lbl]));
-        }
-      }
+      for (const lbl of aiLabels) if (series.https[lbl]) aiDs.push(dsLineGap(lbl, series.https[lbl].totalMs, aiCols[lbl]));
       makeOrUpdateLine("chart-ai", labels, aiDs);
-      // wifi (two axes)
+
       makeOrUpdateLine("chart-wifi", labels, [
-        dsLine("RSSI (dBm)", series.wifi.rssi, "#6a8cff", { yAxisID: "y" }),
-        dsLine("发射速率 (Mbps)", series.wifi.txRate, "#e6b04c", { yAxisID: "y1" }),
+        dsLine(t("chart_rssi"), series.wifi.rssi, "#6a8cff", { yAxisID: "y" }),
+        dsLine(t("chart_txRate"), series.wifi.txRate, "#e6b04c", { yAxisID: "y1" }),
       ], {
         scales: {
           x: { ticks: { color: "#8892a6", maxTicksLimit: 8, font: { size: 10 } }, grid: { color: "#1f2535" } },
@@ -544,15 +791,13 @@
           y1: { position: "right", ticks: { color: "#e6b04c" }, grid: { display: false }, beginAtZero: true, title: { display: true, text: "Mbps", color: "#e6b04c" } },
         },
       });
-      // proxy split: ms chart, mbps chart
       makeOrUpdateLine("chart-proxy-ms", labels, [
-        dsLine("egress 获取耗时", series.proxy.egressMs, "#6a8cff"),
+        dsLine(t("chart_egressMs"), series.proxy.egressMs, "#6a8cff"),
       ]);
       makeOrUpdateLine("chart-proxy-mbps", labels, [
-        { label: "下行 Mbps", data: series.proxy.downloadMbps, borderColor: "#34c47a", backgroundColor: "#34c47a",
+        { label: t("chart_downloadMbps"), data: series.proxy.downloadMbps, borderColor: "#34c47a", backgroundColor: "#34c47a",
           tension: 0, spanGaps: true, borderWidth: 1.4, pointRadius: 3, pointHoverRadius: 5 },
       ]);
-      // dns
       const dnsDs = [];
       const dnsCols = { system: "#e6eaf2", "223.5.5.5": "#34c47a", "119.29.29.29": "#e6b04c", "8.8.8.8": "#ef5364", "1.1.1.1": "#b485ff" };
       for (const [server, arr] of Object.entries(series.dns)) {
@@ -560,12 +805,11 @@
       }
       makeOrUpdateLine("chart-dns", labels, dnsDs);
 
-      // egress IPs seen
       const counts = {};
       for (const ip of series.proxy.egressIp) if (ip) counts[ip] = (counts[ip] || 0) + 1;
       const list = Object.entries(counts).sort((a, b) => b[1] - a[1])
         .map(([ip, n]) => `<code class="mono">${ip}</code> ×${n}`).join(" · ");
-      $("#egress-list").innerHTML = "近期出现的代理出口 IP：" + (list || "（暂无）");
+      $("#egress-list").innerHTML = t("egressListPrefix") + (list || t("egressListNone"));
     }
 
     function renderHttpsTables(state) {
@@ -580,37 +824,57 @@
           <td><span class="dot ${cls}" style="display:inline-block;margin-right:6px;vertical-align:middle"></span>${rate}</td>
           <td>${info.avgMs ? Math.round(info.avgMs) + ' ms' : "—"}</td></tr>`;
       };
-      // Non-AI HTTPS table
       $("#https-table").innerHTML = sorted
         .filter(([k]) => !k.startsWith("anthropic_") && !k.startsWith("openai_"))
         .map(([k, v]) => makeRow(k, v)).join("");
-      // AI table
       $("#ai-table").innerHTML = sorted
         .filter(([k]) => k.startsWith("anthropic_") || k.startsWith("openai_"))
         .map(([k, v]) => makeRow(k, v)).join("");
     }
 
-    // -------------------- refresh loop --------------------
-    async function refresh() {
-      const state = await fetchJson("/api/state");
-      const series = await fetchJson("/api/series?limit=240");
-      const conclusions = await fetchText("/api/conclusions");
-      if (!state) {
-        $("#updated").textContent = "（暂无数据，等待 daemon 完成第一次采样）";
+    // -------------------- refresh --------------------
+    function renderAll() {
+      applyStaticI18n();
+      renderLegend();
+      if (!lastState) {
+        $("#updated").textContent = t("noDataYet");
+        $("#banner-net-title").textContent = t("bannerLoadingTitle");
+        $("#banner-net-sub").textContent = t("bannerLoadingSub");
+        $("#banner-ai-title").textContent = t("bannerLoadingTitle");
+        $("#banner-ai-sub").textContent = t("bannerAiInitialSub");
         return;
       }
-      $("#updated").textContent = new Date(state.updatedAt).toLocaleString("zh-CN", { hour12: false });
-      $("#cycle").textContent = `第 ${state.cycle} 次采样 · 间隔 ${Math.round(state.interval_ms/1000)}s`;
-      renderBanners(state.latest);
-      renderLayers(state.latest);
-      if (series && series.t.length) {
-        renderHeatmap(series);
-        renderCharts(series);
+      $("#updated").textContent = new Date(lastState.updatedAt).toLocaleString(lang === "zh" ? "zh-CN" : "en-GB", { hour12: false });
+      $("#cycle").textContent = t("cycleLabel", { n: lastState.cycle, sec: Math.round(lastState.interval_ms/1000) });
+      renderBanners(lastState.latest);
+      renderLayers(lastState.latest);
+      if (lastSeries && lastSeries.t.length) {
+        renderHeatmap(lastSeries);
+        renderCharts(lastSeries);
       }
-      renderHttpsTables(state);
-      $("#conclusions").textContent = conclusions ?? "(暂无)";
-      $("#latest-raw").textContent = JSON.stringify(state.latest, null, 2);
+      renderHttpsTables(lastState);
+      $("#conclusions").textContent = lastConclusions ?? t("conclusionsEmpty");
+      $("#latest-raw").textContent = JSON.stringify(lastState.latest, null, 2);
     }
+
+    let lastConclusions = null;
+    async function refresh() {
+      lastState = await fetchJson("/api/state");
+      lastSeries = await fetchJson("/api/series?limit=240");
+      lastConclusions = await fetchText("/api/conclusions");
+      renderAll();
+    }
+
+    // -------------------- lang toggle --------------------
+    document.getElementById("lang-toggle").addEventListener("click", () => {
+      lang = lang === "zh" ? "en" : "zh";
+      localStorage.setItem("canireach.lang", lang);
+      renderAll();
+    });
+
+    // initial paint with static strings before data arrives, then fetch
+    applyStaticI18n();
+    renderLegend();
     refresh();
     setInterval(refresh, 15000);
   </script>
