@@ -1006,6 +1006,17 @@ function render() {
   return out.join(`
 `);
 }
+function latestProxyMbps() {
+  for (let i = samples.length - 1;i >= 0; i--) {
+    const d = samples[i].proxyDownload;
+    if (d?.ok && d.mbps != null)
+      return d.mbps;
+  }
+  return null;
+}
+function fmtMbps(mbps) {
+  return mbps >= 10 ? Math.round(mbps).toString() : mbps.toFixed(1);
+}
 function layerMetric(s, key) {
   const D = T[lang];
   switch (key) {
@@ -1041,8 +1052,10 @@ function layerMetric(s, key) {
       if (s.proxyConfig && s.proxyConfig.proxyUrl === null)
         return D.metric.proxyNone || "no proxy configured";
       const eg = s.proxyEgress?.ip;
-      if (eg)
-        return `${D.metric.egress} ${eg}`;
+      if (eg) {
+        const mbps = latestProxyMbps();
+        return mbps != null ? `${D.metric.egress} ${eg} · ${fmtMbps(mbps)} Mbps` : `${D.metric.egress} ${eg}`;
+      }
       return s.proxyConfig?.listening ? D.metric.listening : D.metric.notListening;
     }
     case "ai": {
@@ -1103,10 +1116,12 @@ async function daemonAlive() {
   }
 }
 async function probeOnce() {
+  probeCycle++;
+  const withDownload = DOWNLOAD_EVERY > 0 && probeCycle % DOWNLOAD_EVERY === 1;
   probing = true;
   scheduleDraw();
   try {
-    const s = await collectSample();
+    const s = await collectSample({ withDownload });
     samples.push(s);
     if (samples.length > 240)
       samples.shift();
@@ -1203,7 +1218,7 @@ async function runTui() {
     scheduleNextProbe();
   }
 }
-var DATA_DIR, SAMPLES_PATH, STATE_PATH, ESC = "\x1B[", RESET, DIM, BOLD, fg = (n) => ESC + n + "m", bg = (n) => ESC + n + "m", CURSOR_HIDE, CURSOR_SHOW, ALT_ON, ALT_OFF, CLEAR, COLOR, CELL_BG, T, lang, samples, mode = "probe", probing = false, lastErr = null, spinFrame = 0, lastSamplesMtime = 0, SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏", ICON, drawTimer = null, INTERVAL_MS, probeTimer = null, followTimer = null;
+var DATA_DIR, SAMPLES_PATH, STATE_PATH, ESC = "\x1B[", RESET, DIM, BOLD, fg = (n) => ESC + n + "m", bg = (n) => ESC + n + "m", CURSOR_HIDE, CURSOR_SHOW, ALT_ON, ALT_OFF, CLEAR, COLOR, CELL_BG, T, lang, samples, mode = "probe", probing = false, lastErr = null, spinFrame = 0, lastSamplesMtime = 0, SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏", ICON, drawTimer = null, INTERVAL_MS, DOWNLOAD_EVERY, probeTimer = null, followTimer = null, probeCycle = 0;
 var init_tui = __esm(async () => {
   await init_probe();
   DATA_DIR = new URL("../data/", import.meta.url).pathname;
@@ -1379,6 +1394,7 @@ var init_tui = __esm(async () => {
     unknown: "·"
   };
   INTERVAL_MS = parseInt(process.env.CANIREACH_INTERVAL_MS || "60000", 10);
+  DOWNLOAD_EVERY = parseInt(process.env.CANIREACH_DOWNLOAD_EVERY || "10", 10);
   setInterval(() => {
     if (probing) {
       spinFrame++;
@@ -1582,10 +1598,10 @@ async function runDaemon() {
   };
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
-  log(`daemon up, interval=${INTERVAL_MS2}ms, downloadEvery=${DOWNLOAD_EVERY}, rollingTail=${rolling.length}`);
+  log(`daemon up, interval=${INTERVAL_MS2}ms, downloadEvery=${DOWNLOAD_EVERY2}, rollingTail=${rolling.length}`);
   while (running) {
     cycle++;
-    const withDownload = cycle % DOWNLOAD_EVERY === 1;
+    const withDownload = cycle % DOWNLOAD_EVERY2 === 1;
     const tStart = Date.now();
     try {
       const sample = await collectSample({ withDownload });
@@ -1658,7 +1674,7 @@ function buildState(latest, tail, startedAt, cycle) {
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
-var DATA_DIR3, SAMPLES_PATH3, STATE_PATH3, LOG_PATH, INTERVAL_MS2, DOWNLOAD_EVERY;
+var DATA_DIR3, SAMPLES_PATH3, STATE_PATH3, LOG_PATH, INTERVAL_MS2, DOWNLOAD_EVERY2;
 var init_daemon = __esm(async () => {
   await init_probe();
   DATA_DIR3 = new URL("../data/", import.meta.url).pathname;
@@ -1666,7 +1682,7 @@ var init_daemon = __esm(async () => {
   STATE_PATH3 = `${DATA_DIR3}state.json`;
   LOG_PATH = new URL("../logs/daemon.log", import.meta.url).pathname;
   INTERVAL_MS2 = parseInt(process.env.CANIREACH_INTERVAL_MS || "60000", 10);
-  DOWNLOAD_EVERY = parseInt(process.env.CANIREACH_DOWNLOAD_EVERY || "10", 10);
+  DOWNLOAD_EVERY2 = parseInt(process.env.CANIREACH_DOWNLOAD_EVERY || "10", 10);
 });
 
 // src/cli.ts

@@ -3,6 +3,7 @@
 > Live layered diagnostics for restricted / unstable networks. Tells you exactly which layer's at fault — Wi-Fi, LAN, ISP, overseas route, proxy, or upstream AI APIs — and keeps watching. TUI by default, web dashboard under `--web`.
 
 ![canireach TUI](docs/screenshot.jpg)
+![canireach web dashboard](docs/screenshot-web.jpg)
 
 ## Quick start
 
@@ -24,8 +25,9 @@ Each cycle (~60 s by default) it samples:
 - **LAN** — ping to your gateway.
 - **Domestic Internet** — ping `223.5.5.5`, HTTPS to `baidu`, `taobao`. (Useful even outside CN; failing here = ISP-level outage.)
 - **Overseas direct** — HTTPS to `google`, `cloudflare`, `github` without proxy.
-- **Proxy** — if a proxy is configured (env, macOS system proxy, or `CANIREACH_PROXY`), checks the listener and HTTPS through it. If no proxy is configured, this layer is reported as `skipped`, not as a failure.
+- **Proxy** — if a proxy is configured (env, macOS system proxy, or `CANIREACH_PROXY`), checks the listener and HTTPS through it. If no proxy is configured, this layer is reported as `skipped`, not as a failure. Auto-detects whatever app you use — **Clash Verge / Clash Verge Rev / mihomo**, Surge, V2RayN, shadowsocks, custom — the only thing that matters is that an HTTP proxy URL is reachable via env vars or system proxy settings.
 - **AI services** — `api.anthropic.com` and `api.openai.com`, via direct and (if available) via proxy. Any HTTP response = reachable (these are auth-protected endpoints).
+- **Tailscale** — if installed and signed in, surfaces it in the header. Distinguishes three states: idle, signed-in, exit-node active. When an exit-node is active the "overseas direct" probes are effectively going through Tailscale's egress, which is reflected in the data without any manual switch.
 - DNS resolution against system + `223.5.5.5` / `119.29.29.29` / `8.8.8.8` / `1.1.1.1`.
 - Captive-portal detection (`captive.apple.com`).
 
@@ -64,18 +66,11 @@ The TUI auto-detects whether a daemon (started via `--web`) is already running. 
 - People connecting via Ethernet / USB-C LAN / Thunderbolt — the Wi-Fi layer is marked "skipped" instead of pretending to be broken.
 - People with **no proxy at all** (overseas direct, or just don't use one) — the proxy layer is marked "skipped" and AI is judged on direct reachability alone.
 
-## Layout
+## Tested with
 
-- `src/cli.ts` — entry point. Dispatches between TUI, web, and one-shot.
-- `src/tui.ts` — terminal UI. Raw ANSI + Unicode block cells; no extra deps.
-- `src/probe.ts` — one-shot sample collector.
-- `src/probes.ts` — individual probe implementations + proxy/link detection.
-- `src/verdict.ts` — turns a sample into a layered verdict + AI indicator.
-- `src/daemon.ts` — long-running collector. Writes `data/samples.jsonl` + `data/state.json`.
-- `src/server.ts` — `node:http` server with JSON APIs over the samples.
-- `public/index.html` — single-page dashboard (Chart.js, vendored).
-- `dist/canireach.mjs` — built single-file bundle. The published `bin`.
-- `data/`, `logs/` — runtime output (gitignored).
+- **Clash Verge / Clash Verge Rev** (`verge-mihomo` listener, mixed port — typically `127.0.0.1:7897`) — auto-detected via macOS system proxy.
+- **Tailscale** — detected without depending on the `tailscale` CLI being on `$PATH` (the Mac App Store build doesn't install it). Signals are derived from `tailscaled` presence + any `utun*` interface holding a CGNAT (`100.64.0.0/10`) address + whether the default route uses that `utun`.
+- Plain direct connections (no proxy) and pure overseas networks.
 
 ## Development
 

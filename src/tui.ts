@@ -373,6 +373,18 @@ function render() {
   return out.join("\n");
 }
 
+function latestProxyMbps(): number | null {
+  for (let i = samples.length - 1; i >= 0; i--) {
+    const d = samples[i].proxyDownload;
+    if (d?.ok && d.mbps != null) return d.mbps;
+  }
+  return null;
+}
+
+function fmtMbps(mbps: number): string {
+  return mbps >= 10 ? Math.round(mbps).toString() : mbps.toFixed(1);
+}
+
 function layerMetric(s: Sample, key: "wifi" | "lan" | "broadband" | "overseas_direct" | "proxy" | "ai"): string {
   const D = T[lang];
   switch (key) {
@@ -407,7 +419,10 @@ function layerMetric(s: Sample, key: "wifi" | "lan" | "broadband" | "overseas_di
       // pre-date the field (proxyUrl === undefined) — the latter falls through normally.
       if (s.proxyConfig && s.proxyConfig.proxyUrl === null) return (D.metric as any).proxyNone || "no proxy configured";
       const eg = s.proxyEgress?.ip;
-      if (eg) return `${D.metric.egress} ${eg}`;
+      if (eg) {
+        const mbps = latestProxyMbps();
+        return mbps != null ? `${D.metric.egress} ${eg} · ${fmtMbps(mbps)} Mbps` : `${D.metric.egress} ${eg}`;
+      }
       return s.proxyConfig?.listening ? D.metric.listening : D.metric.notListening;
     }
     case "ai": {
@@ -471,14 +486,18 @@ async function daemonAlive(): Promise<boolean> {
 
 // -------- probe loop (probe mode only) --------
 const INTERVAL_MS = parseInt(process.env.CANIREACH_INTERVAL_MS || "60000", 10);
+const DOWNLOAD_EVERY = parseInt(process.env.CANIREACH_DOWNLOAD_EVERY || "10", 10);
 let probeTimer: NodeJS.Timeout | null = null;
 let followTimer: NodeJS.Timeout | null = null;
+let probeCycle = 0;
 
 async function probeOnce() {
+  probeCycle++;
+  const withDownload = DOWNLOAD_EVERY > 0 && probeCycle % DOWNLOAD_EVERY === 1;
   probing = true;
   scheduleDraw();
   try {
-    const s = await collectSample();
+    const s = await collectSample({ withDownload });
     samples.push(s);
     if (samples.length > 240) samples.shift();
     lastErr = null;
