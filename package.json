@@ -1,11 +1,27 @@
 {
   "name": "canireach",
   "version": "0.1.0",
+  "description": "Local network + AI-service reachability monitor. TUI by default; --web for a Chart.js dashboard.",
   "type": "module",
   "private": true,
+  "bin": {
+    "canireach": "./bin/canireach"
+  },
   "scripts": {
+    "start": "bun src/cli.ts",
+    "tui": "bun src/cli.ts",
+    "web": "bun src/cli.ts --web",
     "daemon": "bun src/daemon.ts",
     "server": "bun src/server.ts",
-    "once": "bun src/probe.ts"
+    "once": "bun src/cli.ts --once"
+  },
+  "files": [
+    "bin",
+    "src",
+    "public",
+    "README.md"
+  ],
+  "engines": {
+    "bun": ">=1.1.0"
   }
 }
