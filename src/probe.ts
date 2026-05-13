@@ -3,8 +3,10 @@
 import {
   probeWifi, probeInterface, probeDns, probePings, probeHttps,
   probeProxyConfig, probeProxyEgress, probeCaptive, probeProxyDownload, detectProxyUrl,
+  probeTailscale,
   type WifiInfo, type InterfaceInfo, type DnsResult, type PingResult,
   type HttpResult, type ProxyConfig, type CaptiveResult, type HttpTarget,
+  type TailscaleInfo,
 } from "./probes";
 import { judge, type Verdict } from "./verdict";
 import { nowIso } from "./util";
@@ -41,6 +43,7 @@ export type Sample = {
   cycleMs: number;               // total probe wall time
   wifi: WifiInfo | null;
   iface: InterfaceInfo | null;
+  tailscale: TailscaleInfo | null;
   dns: DnsResult[];
   pings: PingResult[];
   https: HttpResult[];
@@ -64,8 +67,9 @@ export async function collectSample(opts: { withDownload?: boolean } = {}): Prom
   // If no proxy, only run direct HTTPS probes — proxy targets stay absent rather than fail.
   const httpsTargets = proxyUrl ? [...HTTPS_DIRECT, ...HTTPS_VIA_PROXY] : HTTPS_DIRECT;
 
-  const [wifi, dns, pings, https, proxyConfig, proxyEgress, captive] = await Promise.all([
+  const [wifi, tailscale, dns, pings, https, proxyConfig, proxyEgress, captive] = await Promise.all([
     probeWifi(iface?.primaryDevice ?? null).catch(() => null),
+    probeTailscale(iface?.primaryDevice ?? null).catch(() => null),
     probeDns(DNS_SERVERS, DNS_DOMAINS).catch(() => []),
     probePings(pingTargets).catch(() => []),
     probeHttps(httpsTargets, proxyUrl ?? undefined).catch(() => []),
@@ -81,7 +85,7 @@ export async function collectSample(opts: { withDownload?: boolean } = {}): Prom
   const partial: Omit<Sample, "verdict"> = {
     t: nowIso(),
     cycleMs: performance.now() - started,
-    wifi, iface, dns, pings, https,
+    wifi, iface, tailscale, dns, pings, https,
     proxyConfig, proxyEgress, captive, proxyDownload,
   };
   const verdict = judge(partial as Sample);

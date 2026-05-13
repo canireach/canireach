@@ -25,6 +25,14 @@ export type WifiInfo = {
 
 export type LinkType = "wifi" | "ethernet" | "other" | "unknown";
 
+export type TailscaleInfo = {
+  installed: boolean;        // tailscaled-ish process found
+  signedIn: boolean;         // a utun has a CGNAT (100.64.0.0/10) address
+  exitNodeActive: boolean;   // the default route goes via that utun
+  address: string | null;    // the 100.x address, if signedIn
+  device: string | null;     // the utun device, e.g. "utun4"
+};
+
 export type InterfaceInfo = {
   primaryService: string | null;
   primaryDevice: string | null;
@@ -228,6 +236,36 @@ export async function probeInterface(ports?: Map<string, string>): Promise<Inter
     dhcpServer,
     dhcpDns,
   };
+}
+
+// -------- Tailscale --------
+// Detected without depending on the `tailscale` CLI being on PATH (the Mac App Store
+// build doesn't install it by default). Three signals: daemon presence, a utun with a
+// CGNAT (100.64.0.0/10) address, and whether the default route uses that utun.
+export async function probeTailscale(primaryDevice: string | null): Promise<TailscaleInfo> {
+  const ps = await run("/bin/ps", ["-A", "-o", "comm"], { timeoutMs: 1500 });
+  const installed = /tailscaled|io\.tailscale/i.test(ps.stdout);
+
+  const ifc = await run("/sbin/ifconfig", [], { timeoutMs: 1500 });
+  // Split by lines starting at column 0 (interface name) — each block is one interface.
+  const blocks = ifc.stdout.split(/\n(?=\S)/);
+  let device: string | null = null;
+  let address: string | null = null;
+  for (const blk of blocks) {
+    const name = blk.match(/^(utun\d+):/)?.[1];
+    if (!name) continue;
+    const m = blk.match(/inet (100\.(\d+)\.\d+\.\d+)/);
+    if (!m) continue;
+    const second = parseInt(m[2], 10);
+    if (second >= 64 && second <= 127) {        // CGNAT range
+      device = name;
+      address = m[1];
+      break;
+    }
+  }
+  const signedIn = !!address;
+  const exitNodeActive = signedIn && primaryDevice === device;
+  return { installed, signedIn, exitNodeActive, address, device };
 }
 
 // -------- DNS --------

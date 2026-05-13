@@ -1,6 +1,6 @@
 {
   "name": "canireach",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Local network + AI-service reachability monitor. TUI by default; --web for a Chart.js dashboard.",
   "keywords": [
     "network",

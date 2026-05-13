@@ -120,6 +120,8 @@ const T = {
       linkEthernet: "以太网", linkOther: "非 Wi-Fi 连接", linkNone: "无 Wi-Fi 接口",
       proxyNone: "未配置代理",
     },
+    tsSignedIn: "Tailscale: 已签入 ({addr})",
+    tsExitNode: "Tailscale: exit node 启用（{addr}）",
   },
   en: {
     title: "canireach · network + AI reachability",
@@ -176,6 +178,8 @@ const T = {
       linkEthernet: "Ethernet", linkOther: "Wired", linkNone: "no Wi-Fi interface",
       proxyNone: "no proxy configured",
     },
+    tsSignedIn: "Tailscale: signed in ({addr})",
+    tsExitNode: "Tailscale: exit node active ({addr})",
   },
 };
 
@@ -241,8 +245,13 @@ function render() {
   const cycle = tpl(D.cycle, { n: samples.length });
   const spinner = probing ? "  " + COLOR.info + SPINNER[spinFrame % SPINNER.length] + " " + D.probing + RESET : "";
   const modeTag = COLOR.muted + "  · " + (mode === "follow" ? D.modeFollow : D.modeProbe) + RESET;
+  // Tailscale indicator — only when interesting (signed in or exit-node).
+  const ts = samples[samples.length - 1]?.tailscale;
+  let tsText = "";
+  if (ts?.exitNodeActive)  tsText = "  ·  " + tpl((D as any).tsExitNode, { addr: ts.address ?? "?" });
+  else if (ts?.signedIn)   tsText = "  ·  " + tpl((D as any).tsSignedIn, { addr: ts.address ?? "?" });
   out.push(BOLD + D.title + RESET + spinner + modeTag);
-  out.push(COLOR.muted + `${D.updated} ${updated}  ·  ${cycle}` + RESET);
+  out.push(COLOR.muted + `${D.updated} ${updated}  ·  ${cycle}${tsText}` + RESET);
   out.push("");
 
   // No data yet

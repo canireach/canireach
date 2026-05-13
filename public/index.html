@@ -153,7 +153,7 @@
 <body>
   <header>
     <h1>canireach</h1>
-    <span class="meta" data-i18n-static="metaPrefix"></span><span class="meta"> · <b id="updated">…</b> · <span class="meta" id="cycle"></span></span>
+    <span class="meta" data-i18n-static="metaPrefix"></span><span class="meta"> · <b id="updated">…</b> · <span class="meta" id="cycle"></span><span class="meta" id="tailscale-meta"></span></span>
     <span class="spacer"></span>
     <button class="lang-toggle" id="lang-toggle" aria-label="toggle language">EN</button>
   </header>
@@ -364,6 +364,8 @@
         metric_proxy_none: "未配置代理",
         metric_ai_proxy: "代理: A={a} O={o}",
         metric_ai_direct: "直连: A={a} O={o}",
+        ts_signedIn: "Tailscale: 已签入 ({addr})",
+        ts_exitNode: "Tailscale: exit node 启用（{addr}）",
         // timeline
         timelineTitle: "历史时间线",
         timelineHint: "每一小格 = 一次采样（约每分钟一次）。最左边最早，最右边是刚才。",
@@ -477,6 +479,8 @@
         metric_proxy_none: "no proxy configured",
         metric_ai_proxy: "proxy: A={a} O={o}",
         metric_ai_direct: "direct: A={a} O={o}",
+        ts_signedIn: "Tailscale: signed in ({addr})",
+        ts_exitNode: "Tailscale: exit node active ({addr})",
         timelineTitle: "Timeline",
         timelineHint: "Each cell = one sample (~1 per minute). Oldest left, most recent right.",
         timelineRow_overall: "Network",  timelineRowSub_overall: "overall",
@@ -878,6 +882,12 @@
       }
       $("#updated").textContent = new Date(lastState.updatedAt).toLocaleString(lang === "zh" ? "zh-CN" : "en-GB", { hour12: false });
       $("#cycle").textContent = t("cycleLabel", { n: lastState.cycle, sec: Math.round(lastState.interval_ms/1000) });
+      // Tailscale indicator — only show when actually signed in or exit-node is active.
+      const ts = lastState.latest.tailscale;
+      let tsText = "";
+      if (ts?.exitNodeActive)   tsText = " · " + t("ts_exitNode", { addr: ts.address ?? "?" });
+      else if (ts?.signedIn)    tsText = " · " + t("ts_signedIn", { addr: ts.address ?? "?" });
+      $("#tailscale-meta").textContent = tsText;
       renderBanners(lastState.latest);
       renderLayers(lastState.latest);
       if (lastSeries && lastSeries.t.length) {
