@@ -22,7 +22,6 @@
     "url": "https://github.com/canireach/canireach/issues"
   },
   "type": "module",
-  "private": true,
   "bin": {
     "canireach": "./bin/canireach"
   },
