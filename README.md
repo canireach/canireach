@@ -2,6 +2,8 @@
 
 > Can I reach the AI? Local network + AI-service-availability monitor — answers "is the network up?" and "is the AI up?" at a glance. TUI by default, web dashboard under `--web`.
 
+![canireach TUI](docs/screenshot.jpg)
+
 ## Quick start
 
 Requires [Bun](https://bun.sh/) (`curl -fsSL https://bun.sh/install | bash`). Then:
