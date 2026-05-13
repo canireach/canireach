@@ -1,256 +1,487 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <title>netmon · local network monitor</title>
+  <title>netmon · 网络状态</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root {
-      --bg: #0f1115;
+      --bg: #0e1014;
       --panel: #161a22;
       --panel-2: #1c2230;
-      --fg: #e6eaf2;
-      --muted: #8892a6;
       --border: #232a38;
-      --ok: #2fbf71;
-      --degraded: #d7a32b;
-      --fail: #e25563;
-      --proxy: #6a8cff;
-      --gfw: #c78bff;
-      --skipped: #4b5468;
-      --unknown: #4b5468;
+      --fg: #e6eaf2;
+      --fg-soft: #b8bfcd;
+      --muted: #8892a6;
+      --ok: #34c47a;
+      --warn: #e6b04c;
+      --bad: #ef5364;
+      --info: #6a8cff;
+      --gfw: #b485ff;
+      --skipped: #444c5d;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
-      font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Mono", "Menlo", monospace; }
-    header { padding: 14px 20px; border-bottom: 1px solid var(--border);
-      display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-    header h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: 0.5px; }
-    header .pill { padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; }
-    .pill.healthy { background: rgba(47,191,113,0.15); color: var(--ok); }
-    .pill.gfw_only_proxy_ok { background: rgba(199,139,255,0.15); color: var(--gfw); }
-    .pill.degraded { background: rgba(215,163,43,0.15); color: var(--degraded); }
-    .pill.proxy_bad, .pill.wifi_bad, .pill.lan_bad, .pill.broadband_bad { background: rgba(226,85,99,0.15); color: var(--fail); }
-    .pill.unknown { background: rgba(75,84,104,0.25); color: var(--muted); }
-    .muted { color: var(--muted); }
-    main { padding: 16px 20px 60px; display: grid; gap: 16px;
-      grid-template-columns: repeat(12, 1fr); }
-    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-      padding: 12px 14px; min-height: 80px; }
-    .panel h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--muted);
-      text-transform: uppercase; letter-spacing: 0.06em; }
-    .span-3 { grid-column: span 3; } .span-4 { grid-column: span 4; }
-    .span-6 { grid-column: span 6; } .span-8 { grid-column: span 8; } .span-12 { grid-column: span 12; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    table th, table td { padding: 4px 6px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
-    table th { color: var(--muted); font-weight: 500; }
-    .kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; font-size: 12px; }
-    .kv dt { color: var(--muted); }
-    .kv dd { margin: 0; }
-    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-      vertical-align: 1px; margin-right: 6px; background: var(--unknown); }
-    .status-ok { background: var(--ok); } .status-degraded { background: var(--degraded); }
-    .status-fail { background: var(--fail); } .status-skipped { background: var(--skipped); }
-    .status-unknown { background: var(--unknown); }
-    canvas { width: 100% !important; height: 220px !important; }
-    .heatmap { display: grid; gap: 2px; }
-    .heatmap .cell { height: 14px; border-radius: 2px; }
-    .heatmap-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-    .heatmap-row .label { width: 130px; flex: none; font-size: 11px; color: var(--muted); }
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif; }
+    code, .mono { font-family: "SF Mono", Menlo, Consolas, monospace; }
+
+    /* ---------------- header ---------------- */
+    header { padding: 14px 24px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+    header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.3px; color: var(--fg-soft); }
+    header .meta { font-size: 12px; color: var(--muted); }
+    header .meta b { color: var(--fg-soft); font-weight: 500; }
+
+    main { max-width: 1280px; margin: 0 auto; padding: 20px 24px 60px; display: flex; flex-direction: column; gap: 20px; }
+
+    /* ---------------- top banners: two side-by-side compact strips ---------------- */
+    .banners { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .banner { padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border);
+      background: var(--panel); display: flex; align-items: center; gap: 12px; }
+    .banner .icon { width: 32px; height: 32px; border-radius: 50%; flex: none;
+      display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; }
+    .banner.ok       .icon { background: rgba(52,196,122,0.18); color: var(--ok); }
+    .banner.warn     .icon { background: rgba(230,176,76,0.18); color: var(--warn); }
+    .banner.bad      .icon { background: rgba(239,83,100,0.18); color: var(--bad); }
+    .banner.gfw      .icon { background: rgba(180,133,255,0.18); color: var(--gfw); }
+    .banner.unknown  .icon { background: rgba(136,146,166,0.18); color: var(--muted); }
+    .banner.ok       { border-color: rgba(52,196,122,0.35); }
+    .banner.warn     { border-color: rgba(230,176,76,0.4); }
+    .banner.bad      { border-color: rgba(239,83,100,0.45); }
+    .banner.gfw      { border-color: rgba(180,133,255,0.4); }
+    .banner .text    { flex: 1; min-width: 0; }
+    .banner .text .heading { display: flex; align-items: baseline; gap: 10px; }
+    .banner .text .label { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; flex: none; }
+    .banner .text .title { font-size: 15px; font-weight: 600; line-height: 1.2; }
+    .banner .text .sub { margin-top: 3px; font-size: 12px; color: var(--fg-soft);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ---------------- layer cards: 6 across, compact ---------------- */
+    .layers { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+    .layer-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 12px; position: relative; transition: border-color 0.2s; }
+    .layer-card .top-line { display: flex; align-items: center; gap: 6px; }
+    .layer-card .top-line .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+    .layer-card .layer-name { font-size: 12px; color: var(--fg-soft); font-weight: 600; }
+    .layer-card .layer-name .en { color: var(--muted); opacity: 0.55; font-weight: 400; font-size: 10px; margin-left: 2px; }
+    .layer-card .status-word { margin-top: 6px; font-size: 13px; font-weight: 500; }
+    .layer-card .status-word.ok      { color: var(--ok); }
+    .layer-card .status-word.warn    { color: var(--warn); }
+    .layer-card .status-word.bad     { color: var(--bad); }
+    .layer-card .status-word.gfw     { color: var(--gfw); }
+    .layer-card .status-word.skipped { color: var(--muted); }
+    .layer-card .status-word.unknown { color: var(--muted); }
+    .layer-card .metric { margin-top: 4px; font-size: 11px; color: var(--muted); line-height: 1.4;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .layer-card .metric .mono { color: var(--fg-soft); }
+    .layer-card.ok       { border-color: rgba(52,196,122,0.32); }
+    .layer-card.warn     { border-color: rgba(230,176,76,0.45); }
+    .layer-card.bad      { border-color: rgba(239,83,100,0.5); }
+    .layer-card.gfw      { border-color: rgba(180,133,255,0.32); }
+    .layer-card.skipped  { opacity: 0.5; }
+    .dot.ok      { background: var(--ok); }
+    .dot.warn    { background: var(--warn); }
+    .dot.bad     { background: var(--bad); }
+    .dot.gfw     { background: var(--gfw); }
+    .dot.skipped { background: var(--skipped); }
+    .dot.unknown { background: var(--muted); opacity: 0.5; }
+
+    /* ---------------- section labels ---------------- */
+    .section-title { display: flex; align-items: baseline; gap: 10px; }
+    .section-title h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--fg-soft); }
+    .section-title .hint { font-size: 12px; color: var(--muted); }
+
+    /* ---------------- timeline ---------------- */
+    .timeline { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .heatmap-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+    .heatmap-row .label { width: 110px; flex: none; font-size: 12px; color: var(--fg-soft); }
+    .heatmap-row .label .en { display: block; color: var(--muted); opacity: 0.7; font-size: 10px; }
     .heatmap-row .cells { display: grid; grid-auto-flow: column; grid-auto-columns: 6px; gap: 1px; flex: 1; }
-    .cells .cell { height: 16px; border-radius: 2px; }
+    .cells .cell { height: 18px; border-radius: 2px; }
     .cell.ok        { background: var(--ok); }
-    .cell.degraded  { background: var(--degraded); }
-    .cell.fail      { background: var(--fail); }
-    .cell.skipped   { background: var(--skipped); }
-    .cell.unknown   { background: var(--unknown); opacity: 0.4; }
-    pre { white-space: pre-wrap; word-break: break-word; font-size: 11px; color: var(--fg);
-      background: var(--panel-2); padding: 8px; border-radius: 4px; max-height: 280px; overflow: auto; }
-    .conc { max-height: 360px; overflow: auto; }
-    .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
-    .legend span { display: inline-flex; align-items: center; gap: 4px; }
+    .cell.warn      { background: var(--warn); }
+    .cell.bad       { background: var(--bad); }
+    .cell.gfw       { background: var(--gfw); }
+    .cell.skipped   { background: var(--skipped); opacity: 0.6; }
+    .cell.unknown   { background: var(--muted); opacity: 0.25; }
+    .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 10px; }
+    .legend span { display: inline-flex; align-items: center; gap: 5px; }
     .legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+
+    /* ---------------- tabs ---------------- */
+    .trends { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 0; }
+    .tabs { display: flex; border-bottom: 1px solid var(--border); overflow-x: auto; }
+    .tabs button { background: none; border: none; color: var(--muted); padding: 12px 18px;
+      font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap;
+      font-family: inherit; }
+    .tabs button:hover { color: var(--fg-soft); }
+    .tabs button.active { color: var(--fg); border-bottom-color: var(--info); }
+    .tab-body { padding: 14px 16px; }
+    .tab-body .help { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+    .chart-wrap { position: relative; height: 260px; }
+    canvas { width: 100% !important; height: 100% !important; }
+    .chart-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 800px) {
+      .layers { grid-template-columns: repeat(3, 1fr); }
+      .banners { grid-template-columns: 1fr; }
+      .chart-grid-2 { grid-template-columns: 1fr; }
+    }
+
+    /* ---------------- collapsibles ---------------- */
+    details { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+    details > summary { padding: 12px 16px; cursor: pointer; font-size: 13px; color: var(--fg-soft); list-style: none;
+      display: flex; align-items: center; gap: 8px; }
+    details > summary::-webkit-details-marker { display: none; }
+    details > summary::before { content: "▸"; color: var(--muted); transition: transform 0.15s; }
+    details[open] > summary::before { transform: rotate(90deg); }
+    details > .body { padding: 0 16px 16px; }
+    pre { white-space: pre-wrap; word-break: break-word; font-size: 11px;
+      background: var(--panel-2); padding: 10px; border-radius: 6px; max-height: 360px; overflow: auto; color: var(--fg-soft); }
+
+    /* tables inside detail panes */
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table th, table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+    table th { color: var(--muted); font-weight: 500; }
   </style>
 </head>
 <body>
   <header>
     <h1>netmon</h1>
-    <span class="muted" id="updated">loading…</span>
-    <span class="pill unknown" id="verdict-pill">unknown</span>
-    <span class="muted" id="headline"></span>
-    <span style="flex: 1"></span>
-    <span class="muted" id="cycle"></span>
+    <span class="meta">本机网络状态监测 · <b id="updated">loading…</b> · <span id="cycle"></span></span>
   </header>
 
   <main>
-    <section class="panel span-4">
-      <h2>Current verdict — layered</h2>
-      <table id="layers-table">
-        <thead><tr><th>layer</th><th>state</th><th>notes</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </section>
-
-    <section class="panel span-4">
-      <h2>WiFi · interface</h2>
-      <dl class="kv" id="wifi-kv"></dl>
-    </section>
-
-    <section class="panel span-4">
-      <h2>Proxy</h2>
-      <dl class="kv" id="proxy-kv"></dl>
-    </section>
-
-    <section class="panel span-12">
-      <h2>Verdict timeline (each column = 1 sample)</h2>
-      <div class="heatmap" id="heatmap"></div>
-      <div class="legend" style="margin-top:8px">
-        <span><span class="swatch" style="background:var(--ok)"></span>ok</span>
-        <span><span class="swatch" style="background:var(--degraded)"></span>degraded</span>
-        <span><span class="swatch" style="background:var(--fail)"></span>fail</span>
-        <span><span class="swatch" style="background:var(--skipped)"></span>skipped (dep failed)</span>
-        <span><span class="swatch" style="background:var(--unknown);opacity:0.4"></span>unknown / missing</span>
+    <!-- 1) two side-by-side verdict banners: general internet & AI services -->
+    <section class="banners">
+      <div class="banner unknown" id="banner-net">
+        <div class="icon" id="banner-net-icon">·</div>
+        <div class="text">
+          <div class="heading">
+            <span class="label">网络</span>
+            <span class="title" id="banner-net-title">加载中…</span>
+          </div>
+          <div class="sub" id="banner-net-sub">等待第一个采样</div>
+        </div>
+      </div>
+      <div class="banner unknown" id="banner-ai">
+        <div class="icon" id="banner-ai-icon">·</div>
+        <div class="text">
+          <div class="heading">
+            <span class="label">AI 服务</span>
+            <span class="title" id="banner-ai-title">加载中…</span>
+          </div>
+          <div class="sub" id="banner-ai-sub">Anthropic + OpenAI API 可达性</div>
+        </div>
       </div>
     </section>
 
-    <section class="panel span-6">
-      <h2>Ping RTT (ms)</h2>
-      <canvas id="chart-pings"></canvas>
+    <!-- 2) six-layer compact cards -->
+    <section>
+      <div class="layers" id="layer-cards"></div>
     </section>
 
-    <section class="panel span-6">
-      <h2>WiFi RSSI &amp; tx-rate</h2>
-      <canvas id="chart-wifi"></canvas>
+    <!-- 3) verdict timeline -->
+    <section>
+      <div class="section-title">
+        <h2>历史时间线</h2>
+        <span class="hint">每一小格 = 一次采样（约每分钟一次）。最左边最早，最右边是刚才。</span>
+      </div>
+      <div class="timeline" style="margin-top: 10px" id="timeline-panel">
+        <div id="heatmap"></div>
+        <div class="legend">
+          <span><span class="swatch" style="background:var(--ok)"></span>正常</span>
+          <span><span class="swatch" style="background:var(--gfw)"></span>仅 GFW 屏蔽（代理可用，正常）</span>
+          <span><span class="swatch" style="background:var(--warn)"></span>有些慢</span>
+          <span><span class="swatch" style="background:var(--bad)"></span>故障</span>
+          <span><span class="swatch" style="background:var(--skipped);opacity:0.6"></span>跳过（更底层挂了）</span>
+          <span><span class="swatch" style="background:var(--muted);opacity:0.25"></span>无数据</span>
+        </div>
+      </div>
     </section>
 
-    <section class="panel span-6">
-      <h2>HTTPS total time (ms) — direct vs proxy</h2>
-      <canvas id="chart-https"></canvas>
+    <!-- 4) trends with tabs -->
+    <section>
+      <div class="section-title">
+        <h2>趋势详情</h2>
+        <span class="hint">需要排查具体问题时再展开看，平时不用关注。</span>
+      </div>
+      <div class="trends" style="margin-top: 10px">
+        <div class="tabs" id="tabs">
+          <button data-tab="ping" class="active">延迟（ping）</button>
+          <button data-tab="https">网页打开时间</button>
+          <button data-tab="ai">AI API</button>
+          <button data-tab="wifi">Wi-Fi 信号</button>
+          <button data-tab="proxy">代理</button>
+          <button data-tab="dns">DNS</button>
+        </div>
+        <div class="tab-body">
+          <!-- ping -->
+          <div data-tab-pane="ping">
+            <p class="help">越低越好。<b>网关</b>是你的路由器，正常 1-10ms；<b>223.5.5.5</b> 是国内公共 DNS；<b>1.1.1.1 / 8.8.8.8</b> 是国外公共 DNS（可能丢包，是 GFW 干扰的常见信号）。</p>
+            <div class="chart-wrap"><canvas id="chart-ping"></canvas></div>
+          </div>
+          <!-- https -->
+          <div data-tab-pane="https" hidden>
+            <p class="help">实际打开网页用了多久（毫秒）。<b>direct</b> 是不走代理直连，<b>proxy</b> 是经过代理。<b>失败 / 超时的样本在折线图上显示为断点（gap）</b>，详细成功率看下方表格。</p>
+            <div class="chart-wrap"><canvas id="chart-https"></canvas></div>
+            <table style="margin-top: 14px">
+              <thead><tr><th>目标</th><th>方式</th><th>近期成功率</th><th>平均耗时（成功样本）</th></tr></thead>
+              <tbody id="https-table"></tbody>
+            </table>
+          </div>
+          <!-- ai -->
+          <div data-tab-pane="ai" hidden>
+            <p class="help"><b>Anthropic & OpenAI API 端点可达性。</b>这是「能不能用 Claude / GPT」的最终指标。API 端点对未授权请求会返回 4xx（404/401/421 等），<b>只要返回了任何 HTTP 状态码就算可达</b>。直连在大陆通常会被 Cloudflare 屏蔽或超时，代理是主要通路。</p>
+            <table style="margin-bottom: 14px">
+              <thead><tr><th>端点</th><th>方式</th><th>近期成功率</th><th>平均响应（成功）</th></tr></thead>
+              <tbody id="ai-table"></tbody>
+            </table>
+            <div class="chart-wrap"><canvas id="chart-ai"></canvas></div>
+          </div>
+          <!-- wifi -->
+          <div data-tab-pane="wifi" hidden>
+            <p class="help">信号强度（dBm，越接近 0 越好；-50 强，-70 一般，-80 以下就不稳了）。发射速率反映 Wi-Fi 协商出来的连接速度。</p>
+            <div class="chart-wrap"><canvas id="chart-wifi"></canvas></div>
+          </div>
+          <!-- proxy split into two charts -->
+          <div data-tab-pane="proxy" hidden>
+            <p class="help">两张图分别看代理的<b>响应快慢</b>和<b>实际带宽</b>（不同单位，单独看）。下面列出近期出现过的代理出口 IP。</p>
+            <div class="chart-grid-2">
+              <div>
+                <div class="help" style="margin-bottom:4px;font-weight:500;color:var(--fg-soft)">代理响应时间（毫秒）</div>
+                <div class="chart-wrap" style="height: 220px"><canvas id="chart-proxy-ms"></canvas></div>
+              </div>
+              <div>
+                <div class="help" style="margin-bottom:4px;font-weight:500;color:var(--fg-soft)">代理下行带宽（Mbps · 每 10 次采样一次）</div>
+                <div class="chart-wrap" style="height: 220px"><canvas id="chart-proxy-mbps"></canvas></div>
+              </div>
+            </div>
+            <div id="egress-list" class="help" style="margin-top: 12px"></div>
+          </div>
+          <!-- dns -->
+          <div data-tab-pane="dns" hidden>
+            <p class="help">不同 DNS 服务器的查询时间。如果国内 DNS（223.5.5.5 / 119.29.29.29）也变慢，多半是局域网/上游问题；如果只有海外 DNS（8.8.8.8 / 1.1.1.1）变慢或丢失，多半是 GFW 干扰。</p>
+            <div class="chart-wrap"><canvas id="chart-dns"></canvas></div>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <section class="panel span-6">
-      <h2>DNS query time (ms) by resolver</h2>
-      <canvas id="chart-dns"></canvas>
-    </section>
+    <!-- 5) conclusions (collapsed) -->
+    <details>
+      <summary>本轮结论摘要（由 20 分钟一次的回顾流程更新）</summary>
+      <div class="body"><pre id="conclusions">loading…</pre></div>
+    </details>
 
-    <section class="panel span-6">
-      <h2>Proxy egress IP &amp; download throughput</h2>
-      <canvas id="chart-proxy"></canvas>
-      <div id="egress-list" class="muted" style="margin-top:6px;font-size:11px"></div>
-    </section>
-
-    <section class="panel span-6">
-      <h2>Rolling HTTPS success rate (last window)</h2>
-      <table id="https-table">
-        <thead><tr><th>target</th><th>via</th><th>ok / total</th><th>avg ms</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </section>
-
-    <section class="panel span-12">
-      <h2>Latest conclusions (updated by the 20-min loop)</h2>
-      <pre class="conc" id="conclusions">loading…</pre>
-    </section>
-
-    <section class="panel span-12">
-      <h2>Raw latest sample</h2>
-      <pre id="latest-raw">loading…</pre>
-    </section>
+    <!-- 6) raw -->
+    <details>
+      <summary>最近一次原始采样（JSON）</summary>
+      <div class="body"><pre id="latest-raw">loading…</pre></div>
+    </details>
   </main>
 
   <script src="/chart.js"></script>
   <script>
-    const charts = {};
-    const COLORS = {
-      gw: "#6a8cff", ali: "#2fbf71", cf: "#d7a32b", goo: "#e25563",
-      direct: "#2fbf71", proxy: "#6a8cff",
-      dnsSys: "#e6eaf2", dnsAli: "#2fbf71", dnsTencent: "#d7a32b",
-      dnsGoo: "#e25563", dnsCf: "#c78bff",
+    // -------------------- helpers --------------------
+    const $ = (s) => document.querySelector(s);
+    const fmtTime = (iso) => { try { return new Date(iso).toLocaleTimeString("zh-CN", { hour12: false }); } catch { return iso; } };
+    async function fetchJson(p) { const r = await fetch(p); return r.ok ? r.json() : null; }
+    async function fetchText(p) { const r = await fetch(p); return r.ok ? r.text() : null; }
+
+    // Map a probe layer state → our 4-color bucket
+    const stateBucket = (st) => st === "ok" ? "ok" : st === "degraded" ? "warn" : st === "fail" ? "bad" : st === "skipped" ? "skipped" : "unknown";
+    // Map overall verdict → top banner mood
+    const verdictBucket = (v) => {
+      if (v === "healthy") return { mood: "ok", icon: "✓", title: "正常", sub: "所有检查通过 · 代理通畅 · 国内国际访问均可用" };
+      if (v === "gfw_only_proxy_ok") return { mood: "gfw", icon: "◇", title: "正常（GFW 屏蔽，代理工作中）", sub: "国内畅通，国外直连按预期受限，代理可用 — 大陆机器常态" };
+      if (v === "degraded") return { mood: "warn", icon: "!", title: "略慢", sub: "部分检查偏慢或偶发失败" };
+      if (v === "proxy_bad") return { mood: "bad", icon: "✕", title: "代理异常", sub: "国内正常但代理或上游不工作" };
+      if (v === "broadband_bad") return { mood: "bad", icon: "✕", title: "上游宽带异常", sub: "路由器能通，国内公网挂了" };
+      if (v === "wifi_bad") return { mood: "bad", icon: "✕", title: "Wi-Fi 异常", sub: "信号过弱或未连上" };
+      if (v === "lan_bad") return { mood: "bad", icon: "✕", title: "局域网异常", sub: "Wi-Fi 连上但路由器不响应" };
+      return { mood: "unknown", icon: "·", title: "未知", sub: "等待采样" };
+    };
+    // Map AI state → banner
+    const aiBucket = (state, headline) => {
+      if (state === "ok")          return { mood: "ok",  icon: "✓", title: "正常", sub: headline };
+      if (state === "proxy_only")  return { mood: "ok",  icon: "✓", title: "正常（代理路径）", sub: headline };
+      if (state === "degraded")    return { mood: "warn", icon: "!", title: "部分可用", sub: headline };
+      if (state === "direct_only") return { mood: "warn", icon: "!", title: "代理异常", sub: headline };
+      if (state === "fail")        return { mood: "bad", icon: "✕", title: "不可达", sub: headline };
+      if (state === "skipped")     return { mood: "unknown", icon: "·", title: "无法判断", sub: headline };
+      return { mood: "unknown", icon: "·", title: "未知", sub: "等待采样" };
     };
 
-    async function fetchJson(path) { const r = await fetch(path); return r.ok ? r.json() : null; }
-    async function fetchText(path) { const r = await fetch(path); return r.ok ? r.text() : null; }
+    // Six layer-card definitions: status word, one-line metric. Compact.
+    const STATUS_WORD = { ok: "正常", warn: "略慢", bad: "异常", skipped: "跳过", gfw: "GFW 屏蔽", unknown: "—" };
+    const LAYER_DEF = [
+      {
+        key: "wifi", zh: "Wi-Fi", en: "wireless",
+        metric: (s) => s.wifi
+          ? `<span class="mono">${s.wifi.rssi ?? "?"}dBm</span> · ${s.wifi.txRate ?? "?"}Mbps`
+          : "—",
+      },
+      {
+        key: "lan", zh: "局域网", en: "router",
+        metric: (s) => {
+          const gw = s.iface?.gateway, p = s.pings?.find((x) => x.target === gw);
+          return gw ? `<span class="mono">${gw.split(".").slice(-2).join(".")}</span> · ${p?.ok ? Math.round(p.avgMs) + " ms" : "丢包"}` : "—";
+        },
+      },
+      {
+        key: "broadband", zh: "国内", en: "domestic",
+        metric: (s) => {
+          const b = s.https?.find((h) => h.label === "baidu_direct");
+          return b ? `百度 <span class="mono">${b.ok ? Math.round(b.totalMs) + " ms" : "失败"}</span>` : "—";
+        },
+      },
+      {
+        key: "overseas_direct", zh: "国际直连", en: "direct",
+        metric: (s) => {
+          const direct = (s.https ?? []).filter((h) => h.via === "direct" && !["baidu_direct","taobao_direct","anthropic_direct","openai_direct"].includes(h.label));
+          const ok = direct.filter((h) => h.ok).length;
+          return `${ok}/${direct.length} 可达`;
+        },
+      },
+      {
+        key: "proxy", zh: "代理", en: "proxy",
+        metric: (s) => {
+          const eg = s.proxyEgress?.ip;
+          return eg ? `出口 <span class="mono">${eg}</span>` : (s.proxyConfig?.listening ? "已监听" : "未监听");
+        },
+      },
+      {
+        key: "ai", zh: "AI 服务", en: "claude · gpt",
+        metric: (s) => {
+          const aP = s.https?.find((h) => h.label === "anthropic_proxy")?.ok;
+          const oP = s.https?.find((h) => h.label === "openai_proxy")?.ok;
+          return `代理: A=${aP ? "✓" : "✕"} O=${oP ? "✓" : "✕"}`;
+        },
+      },
+    ];
 
-    function fmtTime(iso) {
-      try { return new Date(iso).toLocaleTimeString([], { hour12: false }); } catch { return iso; }
+    function bucketForOverseas(s, layerSt) {
+      // Promote "fail" for overseas direct to GFW-purple if proxy is OK — it's not really a failure
+      if (layerSt === "fail" && s.verdict?.layers?.find((l) => l.layer === "proxy")?.state === "ok") return "gfw";
+      return stateBucket(layerSt);
     }
-    function shortTimes(arr) { return arr.map(fmtTime); }
 
-    function dotClass(state) {
-      return "status-dot status-" + (state || "unknown");
+    function renderBanners(latest) {
+      // network banner (overall, excludes AI)
+      const v = verdictBucket(latest.verdict.overall);
+      const bN = $("#banner-net");
+      bN.className = "banner " + v.mood;
+      $("#banner-net-icon").textContent = v.icon;
+      $("#banner-net-title").textContent = v.title;
+      $("#banner-net-sub").textContent = latest.verdict.headline && latest.verdict.overall !== "healthy"
+        ? `${v.sub} · ${latest.verdict.headline}` : v.sub;
+      $("#banner-net-sub").title = $("#banner-net-sub").textContent;  // tooltip for truncated text
+
+      // AI banner
+      const aiV = latest.verdict.ai ?? { state: "unknown", headline: "" };
+      const a = aiBucket(aiV.state, aiV.headline);
+      const bA = $("#banner-ai");
+      bA.className = "banner " + a.mood;
+      $("#banner-ai-icon").textContent = a.icon;
+      $("#banner-ai-title").textContent = a.title;
+      $("#banner-ai-sub").textContent = a.sub;
+      $("#banner-ai-sub").title = a.sub;
     }
 
-    function renderLayers(layers) {
-      const tb = document.querySelector("#layers-table tbody");
-      tb.innerHTML = "";
-      for (const l of layers) {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${l.layer}</td>
-          <td><span class="${dotClass(l.state)}"></span>${l.state}</td>
-          <td>${(l.reasons||[]).join("; ") || "<span class='muted'>—</span>"}</td>`;
-        tb.appendChild(tr);
-      }
-    }
-
-    function renderKV(el, entries) {
-      el.innerHTML = "";
-      for (const [k, v] of entries) {
-        const dt = document.createElement("dt"); dt.textContent = k;
-        const dd = document.createElement("dd"); dd.innerHTML = v == null ? "<span class='muted'>—</span>" : v;
-        el.appendChild(dt); el.appendChild(dd);
+    function renderLayers(latest) {
+      const container = $("#layer-cards");
+      container.innerHTML = "";
+      for (const def of LAYER_DEF) {
+        const layer = latest.verdict.layers.find((l) => l.layer === def.key);
+        const st = layer?.state ?? "unknown";
+        const bucket = def.key === "overseas_direct" ? bucketForOverseas(latest, st) : stateBucket(st);
+        const div = document.createElement("div");
+        div.className = "layer-card " + bucket;
+        div.innerHTML = `
+          <div class="top-line">
+            <span class="dot ${bucket}"></span>
+            <span class="layer-name">${def.zh}<span class="en">${def.en}</span></span>
+          </div>
+          <div class="status-word ${bucket}">${STATUS_WORD[bucket]}</div>
+          <div class="metric">${def.metric(latest)}</div>
+        `;
+        container.appendChild(div);
       }
     }
 
     function renderHeatmap(series) {
-      const el = document.getElementById("heatmap");
-      el.innerHTML = "";
-      const layers = ["wifi", "lan", "broadband", "overseas_direct", "proxy"];
-      const verdictRow = document.createElement("div");
-      verdictRow.className = "heatmap-row";
-      verdictRow.innerHTML = `<span class="label">overall</span><div class="cells"></div>`;
-      const cells = verdictRow.querySelector(".cells");
-      for (let i = 0; i < series.verdict.length; i++) {
-        const v = series.verdict[i];
-        const stateClass = v === "healthy" || v === "gfw_only_proxy_ok" ? "ok"
-                       : v === "degraded" ? "degraded"
-                       : v === "unknown" ? "unknown" : "fail";
-        const c = document.createElement("div");
-        c.className = `cell ${stateClass}`;
-        c.title = `${fmtTime(series.t[i])}  ${v}`;
-        cells.appendChild(c);
-      }
-      el.appendChild(verdictRow);
-
+      const root = $("#heatmap");
+      root.innerHTML = "";
+      const layers = [
+        { key: "overall", zh: "网络总体", en: "network" },
+        { key: "ai", zh: "AI 服务", en: "claude/gpt" },
+        { key: "wifi", zh: "Wi-Fi", en: "" },
+        { key: "lan", zh: "局域网", en: "router" },
+        { key: "broadband", zh: "国内", en: "domestic" },
+        { key: "overseas_direct", zh: "国际直连", en: "direct" },
+        { key: "proxy", zh: "代理", en: "proxy" },
+      ];
       for (const layer of layers) {
         const row = document.createElement("div");
         row.className = "heatmap-row";
-        row.innerHTML = `<span class="label">${layer}</span><div class="cells"></div>`;
+        row.innerHTML = `<span class="label">${layer.zh}<span class="en">${layer.en || ""}</span></span><div class="cells"></div>`;
         const cells = row.querySelector(".cells");
-        const arr = series.layers[layer] || [];
+        const arr = layer.key === "overall" ? series.verdict : series.layers[layer.key];
+        const overallStates = series.verdict;
         for (let i = 0; i < arr.length; i++) {
-          const st = arr[i] || "unknown";
-          const c = document.createElement("div");
-          c.className = `cell ${st}`;
-          c.title = `${fmtTime(series.t[i])}  ${layer}: ${st}`;
-          cells.appendChild(c);
+          let cls;
+          if (layer.key === "overall") {
+            const v = arr[i];
+            cls = v === "healthy" ? "ok"
+                : v === "gfw_only_proxy_ok" ? "gfw"
+                : v === "degraded" ? "warn"
+                : v === "unknown" ? "unknown" : "bad";
+          } else if (layer.key === "overseas_direct") {
+            // soft-recolor: fail+proxyOk → gfw purple
+            const st = arr[i];
+            const proxySt = series.layers.proxy[i];
+            if (st === "fail" && proxySt === "ok") cls = "gfw";
+            else cls = stateBucket(st);
+          } else {
+            cls = stateBucket(arr[i]);
+          }
+          const cell = document.createElement("div");
+          cell.className = "cell " + cls;
+          cell.title = `${fmtTime(series.t[i])}  ${layer.zh}: ${arr[i]}`;
+          cells.appendChild(cell);
         }
-        el.appendChild(row);
+        root.appendChild(row);
       }
     }
 
-    function makeOrUpdateLine(id, labels, datasets, yOpts) {
+    // -------------------- tabs --------------------
+    let activeTab = "ping";
+    document.querySelectorAll("#tabs button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        activeTab = btn.dataset.tab;
+        document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b === btn));
+        document.querySelectorAll("[data-tab-pane]").forEach((p) => p.hidden = p.dataset.tabPane !== activeTab);
+        // Charts need a resize kick when un-hidden.
+        for (const id of Object.keys(charts)) charts[id]?.resize();
+      });
+    });
+
+    // -------------------- charts --------------------
+    const charts = {};
+    function makeOrUpdateLine(id, labels, datasets, opts = {}) {
       const cfg = {
         type: "line",
         data: { labels, datasets },
         options: {
           responsive: true, maintainAspectRatio: false, animation: false,
           interaction: { mode: "index", intersect: false },
-          scales: {
-            x: { ticks: { color: "#8892a6", maxTicksLimit: 6 }, grid: { color: "#232a38" } },
-            y: Object.assign({ ticks: { color: "#8892a6" }, grid: { color: "#232a38" } }, yOpts || {}),
-          },
+          scales: Object.assign({
+            x: { ticks: { color: "#8892a6", maxTicksLimit: 8, font: { size: 10 } }, grid: { color: "#1f2535" } },
+            y: { ticks: { color: "#8892a6", font: { size: 10 } }, grid: { color: "#1f2535" }, beginAtZero: opts.beginAtZero ?? true },
+          }, opts.scales || {}),
           plugins: {
-            legend: { labels: { color: "#e6eaf2", font: { size: 11 } } },
+            legend: { labels: { color: "#b8bfcd", font: { size: 11 }, boxWidth: 14, boxHeight: 8 } },
+            tooltip: { backgroundColor: "#1c2230", titleColor: "#e6eaf2", bodyColor: "#b8bfcd", borderColor: "#232a38", borderWidth: 1 },
           },
         },
       };
@@ -263,145 +494,123 @@
       }
     }
 
-    function renderPings(series) {
-      const labels = shortTimes(series.t);
-      makeOrUpdateLine("chart-pings", labels, [
-        { label: "gateway", data: series.pings.gw, borderColor: COLORS.gw, backgroundColor: COLORS.gw, tension: 0.25, spanGaps: true },
-        { label: "223.5.5.5 (CN)", data: series.pings.ali, borderColor: COLORS.ali, backgroundColor: COLORS.ali, tension: 0.25, spanGaps: true },
-        { label: "1.1.1.1", data: series.pings.cf, borderColor: COLORS.cf, backgroundColor: COLORS.cf, tension: 0.25, spanGaps: true },
-        { label: "8.8.8.8", data: series.pings.goo, borderColor: COLORS.goo, backgroundColor: COLORS.goo, tension: 0.25, spanGaps: true },
-      ], { suggestedMin: 0 });
-    }
+    const PAL = ["#34c47a", "#6a8cff", "#e6b04c", "#ef5364", "#b485ff", "#5ed3f3", "#ff8b3d", "#a6e22e", "#e6eaf2"];
+    const dsLine = (label, data, color, opts = {}) => ({
+      label, data, borderColor: color, backgroundColor: color, tension: 0.25, spanGaps: true,
+      borderWidth: 1.4, pointRadius: 0, pointHoverRadius: 4, ...opts,
+    });
+    // For HTTPS: leave failures as null AND don't span gaps — visible breaks show timeouts.
+    const dsLineGap = (label, data, color, opts = {}) => ({
+      label, data, borderColor: color, backgroundColor: color, tension: 0,
+      spanGaps: false, borderWidth: 1.3, pointRadius: 1.5, pointHoverRadius: 4, ...opts,
+    });
 
-    function renderWifi(series) {
-      const labels = shortTimes(series.t);
-      makeOrUpdateLine("chart-wifi", labels, [
-        { label: "RSSI (dBm)", data: series.wifi.rssi, yAxisID: "y", borderColor: "#6a8cff", tension: 0.2, spanGaps: true },
-        { label: "tx rate (Mbps)", data: series.wifi.txRate, yAxisID: "y1", borderColor: "#d7a32b", tension: 0.2, spanGaps: true },
-      ], {});
-      // Add second axis via reconfig — Chart.js needs both axes declared. Reconfigure if missing.
-      const c = charts["chart-wifi"];
-      c.options.scales = {
-        x: c.options.scales.x,
-        y: { position: "left", ticks: { color: "#6a8cff" }, grid: { color: "#232a38" }, suggestedMax: -20, suggestedMin: -90, title: { display: true, text: "dBm", color: "#6a8cff" } },
-        y1: { position: "right", ticks: { color: "#d7a32b" }, grid: { display: false }, suggestedMin: 0, title: { display: true, text: "Mbps", color: "#d7a32b" } },
-      };
-      c.update();
-    }
-
-    function renderHttps(series) {
-      const labels = shortTimes(series.t);
-      const ds = [];
-      const palette = ["#2fbf71","#6a8cff","#d7a32b","#e25563","#c78bff","#e6eaf2","#5ed3f3","#ff8b3d","#a6e22e"];
+    function renderCharts(series) {
+      const labels = series.t.map(fmtTime);
+      // ping
+      makeOrUpdateLine("chart-ping", labels, [
+        dsLine("网关", series.pings.gw, "#6a8cff"),
+        dsLine("223.5.5.5 (国内)", series.pings.ali, "#34c47a"),
+        dsLine("1.1.1.1", series.pings.cf, "#e6b04c"),
+        dsLine("8.8.8.8", series.pings.goo, "#ef5364"),
+      ]);
+      // https — non-AI labels only (AI has its own tab). Timeouts are nulls → visible gaps.
+      const httpsDs = [];
       let i = 0;
-      for (const [lbl, info] of Object.entries(series.https)) {
-        ds.push({ label: lbl, data: info.totalMs, borderColor: palette[i % palette.length], tension: 0.2, spanGaps: true, borderWidth: 1.2, pointRadius: 0 });
-        i++;
+      const nonAiLabels = Object.keys(series.https).filter((k) => !k.startsWith("anthropic_") && !k.startsWith("openai_"));
+      for (const lbl of nonAiLabels) {
+        httpsDs.push(dsLineGap(lbl, series.https[lbl].totalMs, PAL[i++ % PAL.length]));
       }
-      makeOrUpdateLine("chart-https", labels, ds, { suggestedMin: 0 });
-    }
+      makeOrUpdateLine("chart-https", labels, httpsDs);
 
-    function renderDns(series) {
-      const labels = shortTimes(series.t);
-      const ds = [];
-      const palette = { system: "#e6eaf2", "223.5.5.5": "#2fbf71", "119.29.29.29": "#d7a32b", "8.8.8.8": "#e25563", "1.1.1.1": "#c78bff" };
+      // AI: separate chart with the 4 AI labels
+      const aiLabels = ["anthropic_direct", "anthropic_proxy", "openai_direct", "openai_proxy"];
+      const aiCols = { anthropic_direct: "#b485ff", anthropic_proxy: "#34c47a", openai_direct: "#ef5364", openai_proxy: "#6a8cff" };
+      const aiDs = [];
+      for (const lbl of aiLabels) {
+        if (series.https[lbl]) {
+          aiDs.push(dsLineGap(lbl, series.https[lbl].totalMs, aiCols[lbl]));
+        }
+      }
+      makeOrUpdateLine("chart-ai", labels, aiDs);
+      // wifi (two axes)
+      makeOrUpdateLine("chart-wifi", labels, [
+        dsLine("RSSI (dBm)", series.wifi.rssi, "#6a8cff", { yAxisID: "y" }),
+        dsLine("发射速率 (Mbps)", series.wifi.txRate, "#e6b04c", { yAxisID: "y1" }),
+      ], {
+        scales: {
+          x: { ticks: { color: "#8892a6", maxTicksLimit: 8, font: { size: 10 } }, grid: { color: "#1f2535" } },
+          y:  { position: "left", ticks: { color: "#6a8cff" }, grid: { color: "#1f2535" }, suggestedMax: -20, suggestedMin: -90, title: { display: true, text: "dBm", color: "#6a8cff" } },
+          y1: { position: "right", ticks: { color: "#e6b04c" }, grid: { display: false }, beginAtZero: true, title: { display: true, text: "Mbps", color: "#e6b04c" } },
+        },
+      });
+      // proxy split: ms chart, mbps chart
+      makeOrUpdateLine("chart-proxy-ms", labels, [
+        dsLine("egress 获取耗时", series.proxy.egressMs, "#6a8cff"),
+      ]);
+      makeOrUpdateLine("chart-proxy-mbps", labels, [
+        { label: "下行 Mbps", data: series.proxy.downloadMbps, borderColor: "#34c47a", backgroundColor: "#34c47a",
+          tension: 0, spanGaps: true, borderWidth: 1.4, pointRadius: 3, pointHoverRadius: 5 },
+      ]);
+      // dns
+      const dnsDs = [];
+      const dnsCols = { system: "#e6eaf2", "223.5.5.5": "#34c47a", "119.29.29.29": "#e6b04c", "8.8.8.8": "#ef5364", "1.1.1.1": "#b485ff" };
       for (const [server, arr] of Object.entries(series.dns)) {
-        ds.push({ label: server, data: arr, borderColor: palette[server] || "#888", tension: 0.2, spanGaps: true });
+        dnsDs.push(dsLine(server, arr, dnsCols[server] || "#888"));
       }
-      makeOrUpdateLine("chart-dns", labels, ds, { suggestedMin: 0 });
-    }
+      makeOrUpdateLine("chart-dns", labels, dnsDs);
 
-    function renderProxy(series) {
-      const labels = shortTimes(series.t);
-      makeOrUpdateLine("chart-proxy", labels, [
-        { label: "egress fetch ms", data: series.proxy.egressMs, borderColor: "#6a8cff", tension: 0.2, spanGaps: true },
-        { label: "download Mbps (when sampled)", data: series.proxy.downloadMbps, borderColor: "#2fbf71", tension: 0.2, spanGaps: true, pointRadius: 3 },
-      ], { suggestedMin: 0 });
+      // egress IPs seen
       const counts = {};
       for (const ip of series.proxy.egressIp) if (ip) counts[ip] = (counts[ip] || 0) + 1;
-      const list = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([ip, n]) => `${ip} ×${n}`).join("  ·  ");
-      document.getElementById("egress-list").textContent = "egress IPs seen: " + (list || "(none)");
+      const list = Object.entries(counts).sort((a, b) => b[1] - a[1])
+        .map(([ip, n]) => `<code class="mono">${ip}</code> ×${n}`).join(" · ");
+      $("#egress-list").innerHTML = "近期出现的代理出口 IP：" + (list || "（暂无）");
     }
 
-    function renderHttpsTable(state) {
-      const tb = document.querySelector("#https-table tbody");
-      tb.innerHTML = "";
+    function renderHttpsTables(state) {
       const agg = state?.rolling?.httpsAgg || {};
       const sorted = Object.entries(agg).sort((a, b) => (a[0] < b[0] ? -1 : 1));
-      for (const [label, info] of sorted) {
+      const makeRow = (label, info) => {
         const via = label.endsWith("_proxy") ? "proxy" : "direct";
         const rate = info.total ? `${info.ok}/${info.total}` : "—";
-        const tr = document.createElement("tr");
-        const ok = info.total ? info.ok / info.total : 0;
-        const colorCls = ok === 1 ? "status-ok" : ok > 0 ? "status-degraded" : "status-fail";
-        tr.innerHTML = `<td>${label}</td><td>${via}</td>
-          <td><span class="status-dot ${colorCls}"></span>${rate}</td>
-          <td>${info.avgMs ? info.avgMs.toFixed(0) : "—"}</td>`;
-        tb.appendChild(tr);
-      }
+        const okPct = info.total ? info.ok / info.total : 0;
+        const cls = okPct === 1 ? "ok" : okPct > 0 ? "warn" : "bad";
+        return `<tr><td>${label}</td><td>${via}</td>
+          <td><span class="dot ${cls}" style="display:inline-block;margin-right:6px;vertical-align:middle"></span>${rate}</td>
+          <td>${info.avgMs ? Math.round(info.avgMs) + ' ms' : "—"}</td></tr>`;
+      };
+      // Non-AI HTTPS table
+      $("#https-table").innerHTML = sorted
+        .filter(([k]) => !k.startsWith("anthropic_") && !k.startsWith("openai_"))
+        .map(([k, v]) => makeRow(k, v)).join("");
+      // AI table
+      $("#ai-table").innerHTML = sorted
+        .filter(([k]) => k.startsWith("anthropic_") || k.startsWith("openai_"))
+        .map(([k, v]) => makeRow(k, v)).join("");
     }
 
+    // -------------------- refresh loop --------------------
     async function refresh() {
       const state = await fetchJson("/api/state");
       const series = await fetchJson("/api/series?limit=240");
       const conclusions = await fetchText("/api/conclusions");
       if (!state) {
-        document.getElementById("updated").textContent = "(no samples yet — waiting for daemon)";
+        $("#updated").textContent = "（暂无数据，等待 daemon 完成第一次采样）";
         return;
       }
-      document.getElementById("updated").textContent = "updated " + new Date(state.updatedAt).toLocaleString();
-      document.getElementById("cycle").textContent = `cycle #${state.cycle} · interval ${Math.round(state.interval_ms/1000)}s`;
-      const pill = document.getElementById("verdict-pill");
-      pill.className = "pill " + state.latest.verdict.overall;
-      pill.textContent = state.latest.verdict.overall;
-      document.getElementById("headline").textContent = state.latest.verdict.headline;
-      renderLayers(state.latest.verdict.layers);
-
-      const w = state.latest.wifi || {};
-      const iface = state.latest.iface || {};
-      renderKV(document.getElementById("wifi-kv"), [
-        ["SSID", w.ssidRedacted ? "<em>&lt;redacted by macOS&gt;</em>" : w.ssid],
-        ["BSSID", w.bssid],
-        ["channel / band", w.channel ? `${w.channel} (${w.band} GHz)` : null],
-        ["signal", w.rssi != null ? `${w.rssi} dBm` : null],
-        ["noise", w.noise != null ? `${w.noise} dBm` : null],
-        ["tx rate", w.txRate ? `${w.txRate} Mbps` : null],
-        ["phy", w.phyMode],
-        ["primary if", iface.primaryDevice ? `${iface.primaryDevice} (${iface.primaryService ?? "?"})` : null],
-        ["ip", iface.ipv4],
-        ["gateway", iface.gateway],
-        ["DHCP DNS", (iface.dhcpDns || []).join(", ")],
-      ]);
-
-      const pc = state.latest.proxyConfig || {};
-      const sc = pc.scutil || {};
-      renderKV(document.getElementById("proxy-kv"), [
-        ["listening", pc.listening ? `yes (${pc.listenerProcess ?? "?"})` : "no"],
-        ["system HTTP",  sc.HTTPEnable ? `${sc.HTTPProxy}:${sc.HTTPPort}` : "off"],
-        ["system HTTPS", sc.HTTPSEnable ? `${sc.HTTPSProxy}:${sc.HTTPSPort}` : "off"],
-        ["system SOCKS", sc.SOCKSEnable ? `${sc.SOCKSProxy}:${sc.SOCKSPort}` : "off"],
-        ["env http_proxy", pc.envHttp],
-        ["env https_proxy", pc.envHttps],
-        ["env all_proxy", pc.envAll],
-        ["egress IP", state.latest.proxyEgress?.ip],
-        ["egress fetch", state.latest.proxyEgress?.ok ? `${state.latest.proxyEgress.ms.toFixed(0)}ms` : `<span class='muted'>${state.latest.proxyEgress?.err ?? "—"}</span>`],
-        ["last DL (Mbps)", state.latest.proxyDownload?.mbps ? state.latest.proxyDownload.mbps.toFixed(1) : null],
-      ]);
-
-      if (series) {
+      $("#updated").textContent = new Date(state.updatedAt).toLocaleString("zh-CN", { hour12: false });
+      $("#cycle").textContent = `第 ${state.cycle} 次采样 · 间隔 ${Math.round(state.interval_ms/1000)}s`;
+      renderBanners(state.latest);
+      renderLayers(state.latest);
+      if (series && series.t.length) {
         renderHeatmap(series);
-        renderPings(series);
-        renderWifi(series);
-        renderHttps(series);
-        renderDns(series);
-        renderProxy(series);
+        renderCharts(series);
       }
-      renderHttpsTable(state);
-
-      document.getElementById("conclusions").textContent = conclusions ?? "(no conclusions yet)";
-      document.getElementById("latest-raw").textContent = JSON.stringify(state.latest, null, 2);
+      renderHttpsTables(state);
+      $("#conclusions").textContent = conclusions ?? "(暂无)";
+      $("#latest-raw").textContent = JSON.stringify(state.latest, null, 2);
     }
-
     refresh();
     setInterval(refresh, 15000);
   </script>

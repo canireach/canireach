@@ -1,8 +1,9 @@
 // Turn a sample into a layered verdict. The layers are ordered: a failure on a lower
 // layer makes higher layers indeterminate.
 import type { Sample } from "./probe";
+import type { HttpResult } from "./probes";
 
-export type Layer = "wifi" | "lan" | "broadband" | "overseas_direct" | "proxy";
+export type Layer = "wifi" | "lan" | "broadband" | "overseas_direct" | "proxy" | "ai";
 export type LayerState = "ok" | "degraded" | "fail" | "skipped" | "unknown";
 
 export type LayerVerdict = {
@@ -11,6 +12,8 @@ export type LayerVerdict = {
   reasons: string[];
   metrics: Record<string, number | string | boolean | null>;
 };
+
+export type AiState = "ok" | "proxy_only" | "direct_only" | "degraded" | "fail" | "skipped" | "unknown";
 
 export type Verdict = {
   overall:
@@ -24,6 +27,7 @@ export type Verdict = {
     | "unknown";
   headline: string;
   layers: LayerVerdict[];
+  ai: { state: AiState; headline: string };  // independent of `overall` — two distinct final indicators
 };
 
 export function judge(s: Sample): Verdict {
@@ -101,7 +105,10 @@ export function judge(s: Sample): Verdict {
     overseasState = "skipped";
     overseasReasons.push("broadband fail → cannot judge");
   } else {
-    const probes = s.https.filter((h) => h.via === "direct" && h.label !== "baidu_direct");
+    // Exclude domestic targets and AI endpoints — those have their own layers.
+    const probes = s.https.filter((h) =>
+      h.via === "direct"
+      && !["baidu_direct", "taobao_direct", "anthropic_direct", "openai_direct"].includes(h.label));
     const okCount = probes.filter((h) => h.ok).length;
     if (probes.length === 0) overseasState = "unknown";
     else if (okCount === 0) { overseasState = "fail"; overseasReasons.push("all direct overseas fail (GFW or blocked)"); }
@@ -139,7 +146,58 @@ export function judge(s: Sample): Verdict {
     metrics: { listening: s.proxyConfig.listening, egressIp: s.proxyEgress.ip, listenerProcess: s.proxyConfig.listenerProcess },
   });
 
-  // -------- Overall verdict --------
+  // -------- AI services (independent indicator) --------
+  // Reachability of api.anthropic.com and api.openai.com via direct and proxy.
+  const aiReasons: string[] = [];
+  const ant_d = s.https.find((h) => h.label === "anthropic_direct");
+  const ant_p = s.https.find((h) => h.label === "anthropic_proxy");
+  const oai_d = s.https.find((h) => h.label === "openai_direct");
+  const oai_p = s.https.find((h) => h.label === "openai_proxy");
+  const proxyOk = (h: HttpResult | undefined) => !!(h && h.ok);
+  const directOk = (h: HttpResult | undefined) => !!(h && h.ok);
+  const proxyHits = [proxyOk(ant_p), proxyOk(oai_p)].filter(Boolean).length;
+  const directHits = [directOk(ant_d), directOk(oai_d)].filter(Boolean).length;
+
+  let aiState: AiState;
+  let aiHeadline: string;
+  if (proxyState === "fail" && !ant_d?.ok && !oai_d?.ok) {
+    aiState = "skipped";
+    aiHeadline = "代理挂了且直连也不通，无法判断";
+  } else if (proxyHits === 2 && directHits >= 1) {
+    aiState = "ok";
+    aiHeadline = `Anthropic & OpenAI 均可达（代理稳定，部分直连也通：${directHits}/2）`;
+  } else if (proxyHits === 2) {
+    aiState = "proxy_only";
+    aiHeadline = "Anthropic & OpenAI 通过代理可达，直连均被屏蔽";
+  } else if (proxyHits === 1) {
+    aiState = "degraded";
+    const okName = proxyOk(ant_p) ? "Anthropic" : "OpenAI";
+    const failName = proxyOk(ant_p) ? "OpenAI" : "Anthropic";
+    aiHeadline = `仅 ${okName} 代理可达；${failName} 代理失败`;
+    aiReasons.push(`${failName} via proxy: ${(proxyOk(ant_p) ? oai_p : ant_p)?.err ?? "unknown"}`);
+  } else if (directHits > 0) {
+    aiState = "direct_only";
+    aiHeadline = "代理路径失败，但仍有部分直连可达 — 代理 App 异常";
+  } else {
+    aiState = "fail";
+    aiHeadline = "Anthropic 与 OpenAI 均不可达（代理 & 直连都失败）";
+  }
+  layers.push({
+    layer: "ai",
+    state: aiState === "ok" || aiState === "proxy_only" || aiState === "direct_only" ? "ok"
+         : aiState === "degraded" ? "degraded"
+         : aiState === "fail" ? "fail"
+         : aiState === "skipped" ? "skipped" : "unknown",
+    reasons: aiReasons,
+    metrics: {
+      anthropic_proxy_ok: !!ant_p?.ok,
+      openai_proxy_ok: !!oai_p?.ok,
+      anthropic_direct_ok: !!ant_d?.ok,
+      openai_direct_ok: !!oai_d?.ok,
+    },
+  });
+
+  // -------- Overall verdict (general network — does NOT include AI) --------
   let overall: Verdict["overall"];
   let headline: string;
   if (wifiState === "fail") { overall = "wifi_bad"; headline = wifiReasons.join("; "); }
@@ -149,11 +207,11 @@ export function judge(s: Sample): Verdict {
   else if (overseasState === "fail" && proxyState === "ok") { overall = "gfw_only_proxy_ok"; headline = "direct overseas blocked, proxy works"; }
   else if ([wifiState, lanState, bbState, proxyState].some((s) => s === "degraded")) {
     overall = "degraded";
-    headline = layers.filter((l) => l.state === "degraded").flatMap((l) => l.reasons).join("; ") || "some checks slow";
+    headline = layers.filter((l) => l.state === "degraded" && l.layer !== "ai").flatMap((l) => l.reasons).join("; ") || "some checks slow";
   }
   else { overall = "healthy"; headline = "all green"; }
 
-  return { overall, headline, layers };
+  return { overall, headline, layers, ai: { state: aiState, headline: aiHeadline } };
 }
 
 function worse(a: LayerState, b: LayerState): LayerState {

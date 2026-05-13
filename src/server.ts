@@ -77,16 +77,18 @@ function buildSeries(samples: any[]) {
   const cf  = samples.map((s) => s.pings?.find((x: any) => x.target === "1.1.1.1")?.avgMs ?? null);
   const goo = samples.map((s) => s.pings?.find((x: any) => x.target === "8.8.8.8")?.avgMs ?? null);
 
-  // HTTPS per-label series
+  // HTTPS per-label series. Failed requests (timeouts, TLS errors, blocked) become NULL
+  // so the latency chart shows a gap rather than a misleading 8000ms "latency".
   const httpsLabels = new Set<string>();
   for (const s of samples) for (const h of s.https ?? []) httpsLabels.add(h.label);
-  const https: Record<string, { totalMs: (number|null)[]; ok: (boolean|null)[] }> = {};
+  const https: Record<string, { totalMs: (number|null)[]; ok: (boolean|null)[]; timedOut: (boolean|null)[] }> = {};
   for (const lbl of httpsLabels) {
-    https[lbl] = { totalMs: [], ok: [] };
+    https[lbl] = { totalMs: [], ok: [], timedOut: [] };
     for (const s of samples) {
       const h = s.https?.find((x: any) => x.label === lbl);
-      https[lbl].totalMs.push(h ? h.totalMs : null);
+      https[lbl].totalMs.push(h ? (h.ok ? h.totalMs : null) : null);
       https[lbl].ok.push(h ? h.ok : null);
+      https[lbl].timedOut.push(h ? !!h.timedOut : null);
     }
   }
 
@@ -118,9 +120,18 @@ function buildSeries(samples: any[]) {
     broadband: samples.map((s) => layerStateOf(s, "broadband")),
     overseas_direct: samples.map((s) => layerStateOf(s, "overseas_direct")),
     proxy: samples.map((s) => layerStateOf(s, "proxy")),
+    ai: samples.map((s) => layerStateOf(s, "ai")),
   };
 
-  return { t, verdict, wifi, pings: { gw, ali, cf, goo }, https, dns, proxy, captive, layers };
+  const ai = {
+    state: samples.map((s) => s.verdict?.ai?.state ?? null),
+    anthropicProxy: samples.map((s) => s.https?.find((h: any) => h.label === "anthropic_proxy")?.ok ?? null),
+    anthropicDirect: samples.map((s) => s.https?.find((h: any) => h.label === "anthropic_direct")?.ok ?? null),
+    openaiProxy: samples.map((s) => s.https?.find((h: any) => h.label === "openai_proxy")?.ok ?? null),
+    openaiDirect: samples.map((s) => s.https?.find((h: any) => h.label === "openai_direct")?.ok ?? null),
+  };
+
+  return { t, verdict, wifi, pings: { gw, ali, cf, goo }, https, dns, proxy, captive, layers, ai };
 }
 
 async function serveFile(path: string, contentType: string): Promise<Response> {

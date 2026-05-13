@@ -235,6 +235,7 @@ export type HttpTarget = {
   url: string;
   via: "direct" | "proxy";
   expectCode?: number[];      // accepted codes
+  acceptAnyCode?: boolean;    // for API endpoints where any HTTP response = reachable
 };
 
 export async function probeHttps(targets: HttpTarget[], proxy?: string): Promise<HttpResult[]> {
@@ -247,7 +248,9 @@ export async function probeHttps(targets: HttpTarget[], proxy?: string): Promise
         headOnly: true,
       });
       const acceptable = t.expectCode ?? [200, 204, 301, 302, 401, 403];
-      const ok = m.ok && acceptable.includes(m.httpCode);
+      const ok = t.acceptAnyCode
+        ? (m.httpCode > 0 && !m.timedOut)
+        : (m.ok && acceptable.includes(m.httpCode));
       return {
         label: t.label,
         url: t.url,

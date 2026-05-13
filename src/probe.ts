@@ -29,6 +29,13 @@ const HTTPS_TARGETS: HttpTarget[] = [
   { label: "cloudflare_proxy", url: "https://www.cloudflare.com", via: "proxy" },
   { label: "github_proxy", url: "https://github.com", via: "proxy" },
   { label: "youtube_proxy", url: "https://www.youtube.com", via: "proxy" },
+  // AI provider API endpoints — these are auth-protected so any HTTP response is "reachable".
+  // We probe BOTH direct and proxy: in CN direct usually fails (CF block or timeout),
+  // proxy is what the user actually relies on for AI access.
+  { label: "anthropic_direct", url: "https://api.anthropic.com/", via: "direct", acceptAnyCode: true },
+  { label: "openai_direct",    url: "https://api.openai.com/",    via: "direct", acceptAnyCode: true },
+  { label: "anthropic_proxy",  url: "https://api.anthropic.com/", via: "proxy",  acceptAnyCode: true },
+  { label: "openai_proxy",     url: "https://api.openai.com/",    via: "proxy",  acceptAnyCode: true },
 ];
 
 export type Sample = {
